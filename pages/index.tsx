@@ -240,6 +240,22 @@ export default function Home() {
   const [serverUrl, setServerUrl] = useState('');
   const [subfolder, setSubfolder] = useState(''); // current path relative to SHARED_DIR
   const fileInput = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+
+  useEffect(() => {
+    // create object URLs for image previews and revoke previous ones
+    if (!pendingFiles || pendingFiles.length === 0) {
+      pendingPreviews.forEach(u => u && URL.revokeObjectURL(u));
+      setPendingPreviews([]);
+      return;
+    }
+    // revoke any existing previews first
+    pendingPreviews.forEach(u => u && URL.revokeObjectURL(u));
+    const urls = pendingFiles.map(f => f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : '');
+    setPendingPreviews(urls);
+    return () => { urls.forEach(u => u && URL.revokeObjectURL(u)); };
+  }, [pendingFiles]);
 
   // Check PIN requirement on mount
   useEffect(() => {
@@ -256,6 +272,72 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/serverinfo').then(r => r.json()).then(d => setServerUrl(d.url)).catch(() => {});
   }, []);
+
+  // Paste-to-upload: listen for images pasted from clipboard (Ctrl/Cmd+V)
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      try {
+        const clipboard = (e.clipboardData || (window as any).clipboardData) as DataTransfer | undefined;
+        if (!clipboard) return;
+        const files: File[] = [];
+        for (let i = 0; i < clipboard.items.length; i++) {
+          const item = clipboard.items[i];
+          if (item.kind === 'file') {
+            const f = item.getAsFile();
+            if (f) files.push(f);
+          } else if (item.type && item.type.startsWith('image/')) {
+            const f = item.getAsFile && item.getAsFile();
+            if (f) files.push(f);
+          }
+        }
+
+        if (files.length > 0) {
+          // Show confirmation modal (reuse choose-file preview flow)
+          setPendingFiles(files);
+          e.preventDefault();
+        }
+      } catch (err) {
+        console.error('paste upload error', err);
+      }
+    };
+
+    // Handle Ctrl/Cmd+V even when paste event may not fire on the window
+    const onKeyDown = async (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V'))) return;
+      // Try the async Clipboard API first (may provide images)
+      try {
+        const nav = navigator as any;
+        if (nav.clipboard && typeof nav.clipboard.read === 'function') {
+          const items = await nav.clipboard.read();
+          const files: File[] = [];
+          for (const item of items) {
+            for (const type of item.types || []) {
+              if (type.startsWith('image/')) {
+                const blob = await item.getType(type);
+                const ext = type.split('/')[1] || 'png';
+                const file = new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type });
+                files.push(file);
+              }
+            }
+          }
+          if (files.length > 0) {
+            setPendingFiles(files);
+            e.preventDefault();
+          }
+        }
+      } catch (err) {
+        // ignore - clipboard.read may be unsupported or blocked
+        // fallback to the normal paste event handler
+      }
+    };
+
+    window.addEventListener('paste', onPaste as EventListener);
+    window.addEventListener('keydown', onKeyDown as EventListener);
+    return () => {
+      window.removeEventListener('paste', onPaste as EventListener);
+      window.removeEventListener('keydown', onKeyDown as EventListener);
+    };
+  }, [subfolder]);
 
   const showToast = (msg: string, type: 'ok'|'err' = 'ok') => {
     setToast({ msg, type });
@@ -547,7 +629,19 @@ export default function Home() {
           <h2>{dragOver ? 'Drop files here' : 'Drag & drop files to share'}</h2>
           <p>Sharing to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>shared_files/{subfolder}</code></p>
           <button className="btn-upload" onClick={e => { e.stopPropagation(); fileInput.current?.click(); }}>Choose Files</button>
-          <input ref={fileInput} type="file" multiple hidden onChange={e => uploadFiles(e.target.files)} />
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={e => {
+              const files = e.target.files;
+              if (!files) return;
+              setPendingFiles(Array.from(files));
+              // reset input so same file can be selected again later
+              e.currentTarget.value = '';
+            }}
+          />
         </div>
 
         {uploading && (
@@ -646,6 +740,45 @@ export default function Home() {
         <NewFolderModal subfolder={subfolder} onClose={() => setShowNewFolder(false)}
           onDone={async () => { setShowNewFolder(false); showToast('Folder created'); await fetchFiles(); }}
         />
+      )}
+      {pendingFiles && pendingFiles.length > 0 && (
+        <div className="overlay" onClick={() => setPendingFiles(null)}>
+          <div className="dialog" onClick={e => e.stopPropagation()} style={{ maxWidth:560 }}>
+            <h3>Confirm Upload</h3>
+            <p>You're about to upload <strong style={{ color:'var(--text)' }}>{pendingFiles.length}</strong> file(s) to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>shared_files/{subfolder}</code></p>
+            <div style={{ maxHeight: '40vh', overflow: 'auto', marginBottom: 16, padding: 8, background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              {pendingFiles.map((f, i) => (
+                <div key={`${f.name}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: '6px 8px', borderRadius:6 }}>
+                  <div style={{ display:'flex', gap:12, alignItems:'center', minWidth: 0 }}>
+                    {pendingPreviews[i] ? (
+                      <img src={pendingPreviews[i]} alt={f.name} style={{ width:72, height:72, objectFit:'cover', borderRadius:8, flex:'0 0 auto' }} />
+                    ) : (
+                      <div style={{ width:72, height:72, display:'grid', placeItems:'center', background:'var(--surface2)', borderRadius:8, color:'var(--muted)' }}>📄</div>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight:700, fontSize: '0.9rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{f.name}</div>
+                      <div style={{ fontSize:'0.78rem', color:'var(--muted)', fontFamily:'JetBrains Mono' }}>{formatBytes(f.size)}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginLeft:12 }}>
+                    <button className="btn-cancel" onClick={() => setPendingFiles(p => p ? p.filter((_, idx) => idx !== i) : p)}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="dialog-actions">
+              <button className="btn-cancel" onClick={() => setPendingFiles(null)}>Cancel</button>
+              <button onClick={async () => {
+                try {
+                  const dt = new DataTransfer();
+                  pendingFiles.forEach(f => dt.items.add(f));
+                  setPendingFiles(null);
+                  await uploadFiles(dt.files);
+                } catch (err) { console.error(err); showToast('Upload failed', 'err'); }
+              }} style={{ background:'var(--accent)', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, fontFamily:'Syne, sans-serif', fontWeight:700, cursor:'pointer' }}>Upload</button>
+            </div>
+          </div>
+        </div>
       )}
       {confirmDelete && (
         <div className="overlay" onClick={() => setConfirmDelete(null)}>
