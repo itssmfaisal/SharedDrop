@@ -451,7 +451,52 @@ export default function Home() {
         .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
         .btn-cancel { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
         .btn-confirm-del { background: var(--accent2); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-        @media (max-width: 600px) { .file-date { display: none; } .file-name { max-width: 140px; } .header-stats { display: none; } }
+        /* Mobile: collapse table rows into a compact list-style layout */
+        @media (max-width: 600px) {
+          .header-stats { display: none; }
+          .file-table { width: 100%; }
+          .file-table thead { display: none; }
+
+          /* Turn each row into a two-column grid: left = name/meta, right = actions */
+          .file-table tbody tr {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border); /* visible divider line */
+            margin-bottom: 8px;
+          }
+
+          /* hide the original checkbox column to conserve space */
+          .file-table tbody tr td:nth-child(1) { display: none; }
+
+          /* Name column: allow wrapping and truncate long names to two lines */
+          .file-table tbody tr td:nth-child(2) { display: flex; align-items: center; min-width: 0; }
+          .file-icon { font-size: 1rem; margin-right: 8px; flex-shrink: 0; }
+          .file-name { max-width: 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+          /* Put size and modified under the name visually by styling their cells to flow inside the name area */
+          .file-table tbody tr td:nth-child(3),
+          .file-table tbody tr td:nth-child(4) {
+            color: var(--muted);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            margin-left: 8px;
+          }
+
+          /* Actions column stays on the right and becomes compact */
+          .file-table tbody tr td:nth-child(5) { display: flex; justify-content: flex-end; width: 96px; }
+          .actions-cell { gap: 6px; flex-wrap: nowrap; }
+          .btn-dl, .btn-preview { padding: 6px 8px; font-size: 0.72rem; white-space: nowrap; }
+
+          /* Ensure metadata cells don't push into actions */
+          .file-table tbody tr td:nth-child(3), .file-table tbody tr td:nth-child(4) { min-width: 0; }
+
+          /* Reduce padding between cells for compactness; keep a divider on the row */
+          .file-row td { padding: 6px 0; border-bottom: none; }
+          .file-table tbody tr:last-child { border-bottom: none; margin-bottom: 0; }
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
