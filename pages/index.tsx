@@ -542,7 +542,7 @@ export default function Home() {
           /* Turn each row into a two-column grid: left = name/meta, right = actions */
           .file-table tbody tr {
             display: grid;
-            grid-template-columns: 1fr auto;
+            grid-template-columns: minmax(0, 1fr) auto;
             gap: 12px;
             align-items: center;
             padding: 10px 12px;
@@ -556,7 +556,7 @@ export default function Home() {
           /* Name column: allow wrapping and truncate long names to two lines */
           .file-table tbody tr td:nth-child(2) { display: flex; align-items: center; min-width: 0; }
           .file-icon { font-size: 1rem; margin-right: 8px; flex-shrink: 0; }
-          .file-name { max-width: 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+          .file-name { max-width: 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; overflow-wrap: anywhere; }
 
           /* Put size and modified under the name visually by styling their cells to flow inside the name area */
           .file-table tbody tr td:nth-child(3),
@@ -568,8 +568,8 @@ export default function Home() {
           }
 
           /* Actions column stays on the right and becomes compact */
-          .file-table tbody tr td:nth-child(5) { display: flex; justify-content: flex-end; width: 96px; }
-          .actions-cell { gap: 6px; flex-wrap: nowrap; }
+          .file-table tbody tr td:nth-child(5) { display: flex; justify-content: flex-end; width: 96px; flex-shrink: 0; }
+          .actions-cell { gap: 6px; flex-wrap: nowrap; flex-shrink: 0; }
           .btn-dl, .btn-preview { padding: 6px 8px; font-size: 0.72rem; white-space: nowrap; }
 
           /* Ensure metadata cells don't push into actions */
@@ -578,6 +578,13 @@ export default function Home() {
           /* Reduce padding between cells for compactness; keep a divider on the row */
           .file-row td { padding: 6px 0; border-bottom: none; }
           .file-table tbody tr:last-child { border-bottom: none; margin-bottom: 0; }
+        }
+        /* Mobile: ensure upload button is visible and provide a FAB fallback */
+        .fab-upload { display: none; position: fixed; right: 18px; bottom: 18px; z-index: 200; width: 56px; height: 56px; border-radius: 999px; background: var(--accent); color: #fff; border: none; box-shadow: 0 8px 30px rgba(108,99,255,0.35); cursor: pointer; align-items: center; justify-content: center; font-size: 20px; }
+        @media (max-width: 600px) {
+          .dropzone { padding: 18px; min-height: 120px; }
+          .btn-upload { width: 100%; padding: 10px 14px; font-size: 0.9rem; }
+          .fab-upload { display: flex; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
@@ -728,6 +735,9 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Floating upload button for mobile */}
+      <button className="fab-upload" title="Upload files" onClick={() => fileInput.current?.click()}>⤴</button>
+
       {/* Modals */}
       {showQR && serverUrl && <QRModal url={serverUrl} onClose={() => setShowQR(false)} />}
       {previewFile && <PreviewModal file={previewFile} subfolder={subfolder} onClose={() => setPreviewFile(null)} />}
@@ -755,8 +765,8 @@ export default function Home() {
                     ) : (
                       <div style={{ width:72, height:72, display:'grid', placeItems:'center', background:'var(--surface2)', borderRadius:8, color:'var(--muted)' }}>📄</div>
                     )}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight:700, fontSize: '0.9rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{f.name}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight:700, fontSize: '0.9rem', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', wordBreak:'break-word' }}>{f.name}</div>
                       <div style={{ fontSize:'0.78rem', color:'var(--muted)', fontFamily:'JetBrains Mono' }}>{formatBytes(f.size)}</div>
                     </div>
                   </div>
