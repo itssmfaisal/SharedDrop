@@ -9,25 +9,32 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const { from, to } = req.body as { from: string; to: string };
   if (!from || !to) return res.status(400).json({ error: 'Missing from/to' });
 
-  const safeFrom = path.basename(from);
-  const safeTo = path.basename(to);
+  // Normalize user-supplied paths and resolve against SHARED_DIR
+  const normalizedFrom = path.normalize(from).replace(/^([/\\])+/, '');
+  const normalizedTo = path.normalize(to).replace(/^([/\\])+/, '');
 
-  if (!safeTo || safeTo.includes('/') || safeTo.includes('\\'))
-    return res.status(400).json({ error: 'Invalid name' });
+  const srcPath = path.resolve(SHARED_DIR, normalizedFrom);
+  const dstPath = path.resolve(SHARED_DIR, normalizedTo);
 
-  const srcPath = path.join(SHARED_DIR, safeFrom);
-  const dstPath = path.join(SHARED_DIR, safeTo);
-
-  if (!srcPath.startsWith(SHARED_DIR) || !dstPath.startsWith(SHARED_DIR))
+  // Ensure both paths are inside SHARED_DIR
+  const sharedDirResolved = path.resolve(SHARED_DIR);
+  if (!srcPath.startsWith(sharedDirResolved + path.sep) && srcPath !== sharedDirResolved)
+    return res.status(403).json({ error: 'Forbidden' });
+  if (!dstPath.startsWith(sharedDirResolved + path.sep) && dstPath !== sharedDirResolved)
     return res.status(403).json({ error: 'Forbidden' });
 
   if (!fs.existsSync(srcPath)) return res.status(404).json({ error: 'Not found' });
   if (fs.existsSync(dstPath)) return res.status(409).json({ error: 'Name already exists' });
 
+  // Ensure destination directory exists
+  const dstDir = path.dirname(dstPath);
+  if (!fs.existsSync(dstDir)) return res.status(400).json({ error: 'Destination directory does not exist' });
+
   try {
     fs.renameSync(srcPath, dstPath);
-    res.status(200).json({ renamed: safeTo });
-  } catch {
+    res.status(200).json({ renamed: path.relative(sharedDirResolved, dstPath) });
+  } catch (err) {
+    console.error('rename error', err);
     res.status(500).json({ error: 'Rename failed' });
   }
 }
