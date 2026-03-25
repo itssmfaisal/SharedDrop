@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Shared upload folder (auto-created)
+shared_files/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Coverage and caches
+coverage/
+.cache/
+
+# Misc
+*.tgz
