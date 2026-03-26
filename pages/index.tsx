@@ -27,6 +27,7 @@ const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','svg','bmp']);
 const VIDEO_EXTS = new Set(['mp4','webm','ogg','mov','mkv']);
 const AUDIO_EXTS = new Set(['mp3','wav','flac','ogg','aac','m4a']);
 
+const CODE_EXTS = new Set(['js','jsx','ts','tsx','py','rb','java','go','rs','c','cpp','h','cs','php','sh','bash','ps1','css','html','json','xml','yaml','yml','swift','kt','kts','scala','lua','perl','pl','rs']);
 const EXT_ICONS: Record<string, string> = {
   pdf:'📄',doc:'📝',docx:'📝',txt:'📃',md:'📃',
   jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',webp:'🖼️',svg:'🖼️',
@@ -34,6 +35,7 @@ const EXT_ICONS: Record<string, string> = {
   mp3:'🎵',wav:'🎵',flac:'🎵',ogg:'🎵',
   zip:'🗜️',rar:'🗜️',gz:'🗜️',tar:'🗜️','7z':'🗜️',
   js:'💻',ts:'💻',py:'💻',json:'💻',html:'💻',css:'💻',
+  jsx:'💻',tsx:'💻',go:'💻',rs:'💻',java:'💻',c:'💻',cpp:'💻',h:'💻',cs:'💻',php:'💻',rb:'💻',sh:'💻',bash:'💻',swift:'💻',kt:'💻',scala:'💻',lua:'💻',pl:'💻',xml:'💻',yaml:'💻',yml:'💻',
   xls:'📊',xlsx:'📊',csv:'📊',ppt:'📑',pptx:'📑',
 };
 
@@ -107,13 +109,20 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
 
   useEffect(() => {
     let cancelled = false;
-    if (ext === 'txt') {
+    if (ext === 'txt' || CODE_EXTS.has(ext)) {
       fetch(src).then(r => r.text()).then(t => { if (!cancelled) setTextContent(t); }).catch(() => { if (!cancelled) setTextContent('Failed to load'); });
     } else {
       setTextContent(null);
     }
     return () => { cancelled = true; };
   }, [src, ext]);
+  const codeRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (textContent !== null && CODE_EXTS.has(ext) && (window as any).hljs && codeRef.current) {
+      try { (window as any).hljs.highlightElement(codeRef.current); } catch (e) { /* ignore */ }
+    }
+  }, [textContent, ext]);
   return (
     <div className="overlay" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(0,0,0,0.6)' }}>
@@ -131,7 +140,14 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
           {ext === 'pdf' && (
             <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
           )}
-          {ext === 'txt' && (
+          {CODE_EXTS.has(ext) && (
+            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:16 }}>
+              <pre style={{ margin:0 }}>
+                <code ref={el => (codeRef.current = el)} className={ext} style={{ display:'block', padding:12, fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)' }}>{textContent ?? 'Loading…'}</code>
+              </pre>
+            </div>
+          )}
+          {ext === 'txt' && !CODE_EXTS.has(ext) && (
             <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:16 }}>
               <pre style={{ whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'JetBrains Mono, monospace', color:'var(--text)', fontSize:13 }}>{textContent ?? 'Loading…'}</pre>
             </div>
@@ -193,7 +209,7 @@ function RenameModal({ file, subfolder, onClose, onDone }: { file: FileInfo; sub
 }
 
 // ── New Folder Modal ──────────────────────────────────────────────────────────
-function NewFolderModal({ subfolder, onClose, onDone }: { subfolder: string; onClose: () => void; onDone: () => void }) {
+function NewFolderModal({ subfolder, onClose, onDone, sharedDir, sharedDirDisplay }: { subfolder: string; onClose: () => void; onDone: () => void; sharedDir: string; sharedDirDisplay: string }) {
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -463,7 +479,7 @@ export default function Home() {
 
   const navigateTo = (folder: string) => { setSubfolder(folder); setSearch(''); setSelected(new Set()); };
 
-  const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext) || f.ext === 'txt' || f.ext === 'pdf';
+  const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext) || f.ext === 'txt' || f.ext === 'pdf' || CODE_EXTS.has(f.ext);
 
   const sortedFiles = [...files]
     .filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
@@ -496,6 +512,8 @@ export default function Home() {
         <title>SharedDrop — Local File Sharing</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
       </Head>
 
       <style>{`
@@ -822,6 +840,7 @@ export default function Home() {
       )}
       {showNewFolder && (
         <NewFolderModal subfolder={subfolder} onClose={() => setShowNewFolder(false)}
+          sharedDir={sharedDir} sharedDirDisplay={sharedDirDisplay}
           onDone={async () => { setShowNewFolder(false); showToast('Folder created'); await fetchFiles(); }}
         />
       )}
