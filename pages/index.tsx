@@ -215,7 +215,7 @@ function NewFolderModal({ subfolder, onClose, onDone }: { subfolder: string; onC
     <div className="overlay" onClick={onClose}>
       <div className="dialog" onClick={e => e.stopPropagation()}>
         <h3>New Folder</h3>
-        <p style={{ marginBottom:16 }}>Create a new folder inside <strong style={{ color:'var(--text)' }}>{subfolder || 'shared_files/'}</strong></p>
+        <p style={{ marginBottom:16 }}>Create a new folder inside <strong style={{ color:'var(--text)' }}>{subfolder ? (sharedDirDisplay || sharedDir || 'shared_files') + '/' + subfolder : (sharedDirDisplay || sharedDir || 'shared_files') + '/'}</strong></p>
         <input
           value={name} onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
@@ -259,7 +259,6 @@ function NewFileModal({ subfolder, onClose, onDone }: { subfolder: string; onClo
     <div className="overlay" onClick={onClose}>
       <div className="dialog" onClick={e => e.stopPropagation()}>
         <h3>New File</h3>
-        <p style={{ marginBottom:16 }}>Create a new file inside <strong style={{ color:'var(--text)' }}>{subfolder || 'shared_files/'}</strong></p>
         <input
           value={name} onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
@@ -303,6 +302,8 @@ export default function Home() {
   const [showNewFile, setShowNewFile] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
+  const [sharedDir, setSharedDir] = useState<string>('');
+  const [sharedDirDisplay, setSharedDirDisplay] = useState<string>('');
   const [subfolder, setSubfolder] = useState(''); // current path relative to SHARED_DIR
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
@@ -335,7 +336,13 @@ export default function Home() {
 
   // Get server info for QR
   useEffect(() => {
-    fetch('/api/serverinfo').then(r => r.json()).then(d => setServerUrl(d.url)).catch(() => {});
+    fetch('/api/serverinfo').then(r => r.json()).then(d => {
+      setServerUrl(d.url);
+      if (d.sharedDir) setSharedDir(d.sharedDir);
+      // prefer server-provided display; fall back to absolute sharedDir
+      if (d.sharedDirDisplay) setSharedDirDisplay(d.sharedDirDisplay);
+      else if (d.sharedDir) setSharedDirDisplay(d.sharedDir);
+    }).catch(() => {});
   }, []);
 
   // Paste-to-upload: listen for images pasted from clipboard (Ctrl/Cmd+V)
@@ -663,6 +670,7 @@ export default function Home() {
           <div className="header-text">
             <h1>SharedDrop</h1>
             <p>local network file sharing</p>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.78rem', color: 'var(--muted)', marginTop: 4 }}>{sharedDirDisplay || sharedDir || 'shared_files'}</p>
           </div>
           <div className="header-actions">
             <div className="header-stats">
@@ -677,7 +685,7 @@ export default function Home() {
 
         {/* Breadcrumb */}
         <div className="breadcrumb">
-          <span className={`crumb${subfolder === '' ? ' active' : ''}`} onClick={() => navigateTo('')}>📁 shared_files</span>
+          <span className={`crumb${subfolder === '' ? ' active' : ''}`} onClick={() => navigateTo('')}>📁 {sharedDirDisplay || sharedDir || 'shared_files'}</span>
           {crumbs.map((c, i) => {
             const path = crumbs.slice(0, i+1).join('/');
             const isLast = i === crumbs.length - 1;
@@ -699,7 +707,7 @@ export default function Home() {
         >
           <div className="dropzone-icon">{dragOver ? '📂' : '☁️'}</div>
           <h2>{dragOver ? 'Drop files here' : 'Drag & drop files to share'}</h2>
-          <p>Sharing to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>shared_files/{subfolder}</code></p>
+          <p>Sharing to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>{(sharedDirDisplay || sharedDir || 'shared_files') + (subfolder ? `/${subfolder}` : '')}</code></p>
           <button className="btn-upload" onClick={e => { e.stopPropagation(); fileInput.current?.click(); }}>Choose Files</button>
           <input
             ref={fileInput}
@@ -826,7 +834,7 @@ export default function Home() {
         <div className="overlay" onClick={() => setPendingFiles(null)}>
           <div className="dialog" onClick={e => e.stopPropagation()} style={{ maxWidth:560 }}>
             <h3>Confirm Upload</h3>
-            <p>You're about to upload <strong style={{ color:'var(--text)' }}>{pendingFiles.length}</strong> file(s) to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>shared_files/{subfolder}</code></p>
+            <p>You're about to upload <strong style={{ color:'var(--text)' }}>{pendingFiles.length}</strong> file(s) to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>{(sharedDirDisplay || sharedDir || 'shared_files') + (subfolder ? `/${subfolder}` : '')}</code></p>
             <div style={{ maxHeight: '40vh', overflow: 'auto', marginBottom: 16, padding: 8, background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
               {pendingFiles.map((f, i) => (
                 <div key={`${f.name}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: '6px 8px', borderRadius:6 }}>

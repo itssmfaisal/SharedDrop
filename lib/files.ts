@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-export const SHARED_DIR = path.join(process.cwd(), 'shared_files');
+// Use an explicit environment variable if provided, otherwise place the
+// shared folder on the user's Desktop: ~/Desktop/SharedDrop
+// Resolve to an absolute path so relative env values like './Desktop/SharedDrop'
+// are expanded and the UI can correctly shorten it to '~' when under home.
+export const SHARED_DIR = path.resolve(process.env.SHARED_DIR || path.join(os.homedir(), 'Desktop', 'SharedDrop'));
 
 export function ensureSharedDir() {
   if (!fs.existsSync(SHARED_DIR)) {

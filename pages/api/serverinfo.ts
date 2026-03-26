@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import os from 'os';
+import { ensureSharedDir, SHARED_DIR } from '../../lib/files';
 
 function getLocalIP(): string {
   const nets = os.networkInterfaces();
@@ -15,7 +16,13 @@ function getLocalIP(): string {
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end();
+  // Ensure the shared directory exists on each info request/startup
+  try { ensureSharedDir(); } catch (err) { /* ignore */ }
+
   const ip = getLocalIP();
   const port = process.env.PORT || '3000';
-  res.status(200).json({ ip, port, url: `http://${ip}:${port}` });
+  const path = require('path');
+  const sharedDirAbsolute = path.resolve(SHARED_DIR);
+  // Return the absolute path for display (no ~ or ./ shortening)
+  res.status(200).json({ ip, port, url: `http://${ip}:${port}`, sharedDir: sharedDirAbsolute, sharedDirDisplay: sharedDirAbsolute });
 }
