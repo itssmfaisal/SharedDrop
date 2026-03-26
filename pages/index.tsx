@@ -24,7 +24,7 @@ function formatDate(iso: string): string {
 }
 
 const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','svg','bmp']);
-const VIDEO_EXTS = new Set(['mp4','webm','ogg','mov']);
+const VIDEO_EXTS = new Set(['mp4','webm','ogg','mov','mkv']);
 const AUDIO_EXTS = new Set(['mp3','wav','flac','ogg','aac','m4a']);
 
 const EXT_ICONS: Record<string, string> = {
@@ -103,6 +103,17 @@ function QRModal({ url, onClose }: { url: string; onClose: () => void }) {
 function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder: string; onClose: () => void }) {
   const src = `/api/download?name=${encodeURIComponent(file.name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
   const ext = file.ext.toLowerCase();
+  const [textContent, setTextContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (ext === 'txt') {
+      fetch(src).then(r => r.text()).then(t => { if (!cancelled) setTextContent(t); }).catch(() => { if (!cancelled) setTextContent('Failed to load'); });
+    } else {
+      setTextContent(null);
+    }
+    return () => { cancelled = true; };
+  }, [src, ext]);
   return (
     <div className="overlay" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(0,0,0,0.6)' }}>
@@ -116,6 +127,14 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
           )}
           {VIDEO_EXTS.has(ext) && (
             <video src={src} controls style={{ maxWidth:'80vw', maxHeight:'68vh', borderRadius:8 }} />
+          )}
+          {ext === 'pdf' && (
+            <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
+          )}
+          {ext === 'txt' && (
+            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:16 }}>
+              <pre style={{ whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'JetBrains Mono, monospace', color:'var(--text)', fontSize:13 }}>{textContent ?? 'Loading…'}</pre>
+            </div>
           )}
           {AUDIO_EXTS.has(ext) && (
             <div style={{ padding:'40px 60px', display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
@@ -217,6 +236,51 @@ function NewFolderModal({ subfolder, onClose, onDone }: { subfolder: string; onC
   );
 }
 
+// ── New File Modal ───────────────────────────────────────────────────────────
+function NewFileModal({ subfolder, onClose, onDone }: { subfolder: string; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setErr('');
+    const r = await fetch('/api/create-file', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), subfolder: subfolder || undefined, content }),
+    });
+    setBusy(false);
+    if (r.ok) { onDone(); }
+    else { const d = await r.json().catch(() => ({})); setErr(d.error || 'Failed'); }
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e => e.stopPropagation()}>
+        <h3>New File</h3>
+        <p style={{ marginBottom:16 }}>Create a new file inside <strong style={{ color:'var(--text)' }}>{subfolder || 'shared_files/'}</strong></p>
+        <input
+          value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+          placeholder="File name (e.g. notes.txt)…"
+          style={{ width:'100%', padding:'10px 14px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'Syne, sans-serif', fontSize:'0.9rem', outline:'none', marginBottom: 12 }}
+          autoFocus
+        />
+        <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="Initial content (optional)" style={{ width:'100%', minHeight:120, padding:'10px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:'0.85rem', outline:'none', marginBottom: err ? 8 : 16 }} />
+        {err && <p style={{ color:'var(--accent2)', fontSize:'0.82rem', marginBottom:16 }}>{err}</p>}
+        <div className="dialog-actions">
+          <button className="btn-cancel" onClick={onClose}>Cancel</button>
+          <button onClick={submit} disabled={busy || !name.trim()}
+            style={{ background:'var(--accent)', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, fontFamily:'Syne, sans-serif', fontWeight:700, cursor:'pointer', opacity: busy?0.6:1 }}>
+            {busy ? 'Creating…' : 'Create File'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function Home() {
   const [pinRequired, setPinRequired] = useState<boolean | null>(null);
@@ -236,6 +300,7 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
   const [renameFile, setRenameFile] = useState<FileInfo | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [showNewFile, setShowNewFile] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [subfolder, setSubfolder] = useState(''); // current path relative to SHARED_DIR
@@ -391,7 +456,7 @@ export default function Home() {
 
   const navigateTo = (folder: string) => { setSubfolder(folder); setSearch(''); setSelected(new Set()); };
 
-  const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext);
+  const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext) || f.ext === 'txt' || f.ext === 'pdf';
 
   const sortedFiles = [...files]
     .filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
@@ -665,6 +730,7 @@ export default function Home() {
             <input type="text" placeholder="Search files…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <button className="btn-new-folder" onClick={() => setShowNewFolder(true)}>📁 New Folder</button>
+          <button className="btn-new-folder" onClick={() => setShowNewFile(true)} style={{ marginLeft: 6 }}>📄 New File</button>
           {selected.size > 0 && (
             <button className="btn-danger" onClick={deleteSelected}>🗑 Delete {selected.size}</button>
           )}
@@ -749,6 +815,11 @@ export default function Home() {
       {showNewFolder && (
         <NewFolderModal subfolder={subfolder} onClose={() => setShowNewFolder(false)}
           onDone={async () => { setShowNewFolder(false); showToast('Folder created'); await fetchFiles(); }}
+        />
+      )}
+      {showNewFile && (
+        <NewFileModal subfolder={subfolder} onClose={() => setShowNewFile(false)}
+          onDone={async () => { setShowNewFile(false); showToast('File created'); await fetchFiles(); }}
         />
       )}
       {pendingFiles && pendingFiles.length > 0 && (

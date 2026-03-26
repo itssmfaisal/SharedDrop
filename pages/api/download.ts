@@ -43,8 +43,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   };
   const mimeType = mimeMap[ext] || 'application/octet-stream';
 
-  // For preview: inline. For unknown types: attachment (download)
-  const disposition = mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/')
+  // For preview: inline for images/videos/audio and PDFs. For other unknown types: attachment (download)
+  const disposition = mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/') || mimeType === 'application/pdf'
     ? 'inline'
     : `attachment; filename="${safeName}"`;
 
