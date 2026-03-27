@@ -156,20 +156,20 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
             <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
           )}
           {CODE_EXTS.has(ext) && (
-            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:12 }}>
+            <div style={{ width:'80vw', height:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:12 }}>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginBottom:8 }}>
                 <button className="btn-preview" onClick={async (e) => { e.stopPropagation(); if (!textContent) return; try { await navigator.clipboard.writeText(textContent); setCopying(true); setTimeout(() => setCopying(false), 1400); } catch (_) { setCopying(false); } }}>{copying ? 'Copied' : 'Copy'}</button>
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns: '48px 1fr', gap:12, alignItems:'start' }}>
-                <div style={{ textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:12, paddingTop:6, userSelect:'none', paddingRight:8 }}>
+              <div style={{ display:'grid', gridTemplateColumns: '48px 1fr', gap:12, alignItems:'start', overflow: 'visible', maxHeight: 'none' }}>
+                <div style={{ textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:12, paddingTop:6, userSelect:'none', paddingRight:8, overflow: 'visible', maxHeight: 'none' }}>
                   {(highlightedLines || (textContent ? textContent.split(/\r?\n/) : [])).map((_, i) => (
                     <div key={i} style={{ height: '1.38em', lineHeight: '1.38em' }}>{i + 1}</div>
                   ))}
                 </div>
 
-                <div style={{ overflow: 'auto', maxHeight: '68vh' }}>
-                  <pre style={{ margin:0, padding:8, background:'transparent', fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)', whiteSpace:'pre' }}>
+                <div style={{ overflow: 'visible', maxHeight: 'none' }}>
+                  <pre style={{ margin:0, padding:8, background:'transparent', fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)', whiteSpace:'pre', overflow: 'visible', maxHeight: 'none' }}>
                     {highlightedLines ? (
                       highlightedLines.map((lineHtml, i) => (
                         <div key={i} style={{ minHeight: '1.38em', lineHeight: '1.38em' }} dangerouslySetInnerHTML={{ __html: lineHtml || '&nbsp;' }} />
