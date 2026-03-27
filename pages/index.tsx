@@ -106,6 +106,8 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
   const src = `/api/download?name=${encodeURIComponent(file.name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
   const ext = file.ext.toLowerCase();
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [highlightedLines, setHighlightedLines] = useState<string[] | null>(null);
+  const [copying, setCopying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,12 +118,25 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
     }
     return () => { cancelled = true; };
   }, [src, ext]);
-  const codeRef = useRef<HTMLElement | null>(null);
 
+  // Build syntax-highlighted HTML per-line (using highlight.js) so we can render a line-number gutter.
   useEffect(() => {
-    if (textContent !== null && CODE_EXTS.has(ext) && (window as any).hljs && codeRef.current) {
-      try { (window as any).hljs.highlightElement(codeRef.current); } catch (e) { /* ignore */ }
+    let cancelled = false;
+    setHighlightedLines(null);
+    if (textContent !== null && CODE_EXTS.has(ext) && (window as any).hljs) {
+      try {
+        const tmp = document.createElement('code');
+        tmp.className = ext;
+        tmp.textContent = textContent;
+        try { (window as any).hljs.highlightElement(tmp); } catch (e) { /* ignore */ }
+        const html = tmp.innerHTML || '';
+        const lines = html.split(/\r?\n/);
+        if (!cancelled) setHighlightedLines(lines);
+      } catch (e) {
+        if (!cancelled) setHighlightedLines(null);
+      }
     }
+    return () => { cancelled = true; };
   }, [textContent, ext]);
   return (
     <div className="overlay" onClick={onClose}>
@@ -141,10 +156,30 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
             <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
           )}
           {CODE_EXTS.has(ext) && (
-            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:16 }}>
-              <pre style={{ margin:0 }}>
-                <code ref={el => (codeRef.current = el)} className={ext} style={{ display:'block', padding:12, fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)' }}>{textContent ?? 'Loading…'}</code>
-              </pre>
+            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:12 }}>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginBottom:8 }}>
+                <button className="btn-preview" onClick={async (e) => { e.stopPropagation(); if (!textContent) return; try { await navigator.clipboard.writeText(textContent); setCopying(true); setTimeout(() => setCopying(false), 1400); } catch (_) { setCopying(false); } }}>{copying ? 'Copied' : 'Copy'}</button>
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns: '48px 1fr', gap:12, alignItems:'start' }}>
+                <div style={{ textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:12, paddingTop:6, userSelect:'none', paddingRight:8 }}>
+                  {(highlightedLines || (textContent ? textContent.split(/\r?\n/) : [])).map((_, i) => (
+                    <div key={i} style={{ height: '1.38em', lineHeight: '1.38em' }}>{i + 1}</div>
+                  ))}
+                </div>
+
+                <div style={{ overflow: 'auto', maxHeight: '68vh' }}>
+                  <pre style={{ margin:0, padding:8, background:'transparent', fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)', whiteSpace:'pre' }}>
+                    {highlightedLines ? (
+                      highlightedLines.map((lineHtml, i) => (
+                        <div key={i} style={{ minHeight: '1.38em', lineHeight: '1.38em' }} dangerouslySetInnerHTML={{ __html: lineHtml || '&nbsp;' }} />
+                      ))
+                    ) : (
+                      <code style={{ display:'block', padding:0, border:0, background:'transparent', color:'var(--text)' }}>{textContent ?? 'Loading…'}</code>
+                    )}
+                  </pre>
+                </div>
+              </div>
             </div>
           )}
           {ext === 'txt' && !CODE_EXTS.has(ext) && (
