@@ -101,6 +101,38 @@ function QRModal({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
+// Video player with resume feature (top-level component)
+function VideoWithResume({ src, fileKey }: { src: string; fileKey: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const saved = localStorage.getItem('videoTime:' + fileKey);
+    if (saved) {
+      const t = parseFloat(saved);
+      if (!isNaN(t)) v.currentTime = t;
+    }
+  }, [fileKey]);
+
+  const saveTime = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    localStorage.setItem('videoTime:' + fileKey, String(v.currentTime));
+  }, [fileKey]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      controls
+      style={{ maxWidth: '80vw', maxHeight: '68vh', borderRadius: 8 }}
+      onPause={saveTime}
+      onTimeUpdate={saveTime}
+    />
+  );
+}
+
 // ── Preview Modal ─────────────────────────────────────────────────────────────
 function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder: string; onClose: () => void }) {
   const src = `/api/download?name=${encodeURIComponent(file.name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
@@ -138,6 +170,8 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
     }
     return () => { cancelled = true; };
   }, [textContent, ext]);
+  
+
   return (
     <div className="overlay" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(0,0,0,0.6)' }}>
@@ -150,8 +184,9 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
             <img src={src} alt={file.name} style={{ maxWidth:'80vw', maxHeight:'68vh', borderRadius:8, objectFit:'contain' }} />
           )}
           {VIDEO_EXTS.has(ext) && (
-            <video src={src} controls style={{ maxWidth:'80vw', maxHeight:'68vh', borderRadius:8 }} />
+            <VideoWithResume src={src} fileKey={(subfolder ? subfolder + '/' : '') + file.name} />
           )}
+          
           {ext === 'pdf' && (
             <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
           )}
