@@ -6,7 +6,7 @@
 module.exports = {
   reactStrictMode: true,
   poweredByHeader: false,
-  basePath: '/ftp-server',
+  basePath: '',
   assetPrefix: '/ftp-server',
   // If you need custom rewrites or redirects for the subpath, add them here.
 };
