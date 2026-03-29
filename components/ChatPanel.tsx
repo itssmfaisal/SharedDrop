@@ -14,7 +14,8 @@ export default function ChatPanel() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -24,6 +25,7 @@ export default function ChatPanel() {
   const [editText, setEditText] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; file: File; preview?: string }>>([]);
 
   const fetchMsgs = async () => {
     try {
@@ -46,33 +48,77 @@ export default function ChatPanel() {
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
 
   const sendText = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && pendingFiles.length === 0) return;
     setSending(true);
     try {
-      await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'text', content: text.trim() }) });
-      setText(''); await fetchMsgs();
+      // If there are pending attachments, upload them first
+      if (pendingFiles.length > 0) {
+        const files = pendingFiles.map(p => p.file);
+        await uploadFiles(files);
+        // revoke object URLs
+        pendingFiles.forEach(p => { if (p.preview) try { URL.revokeObjectURL(p.preview); } catch (e) {} });
+        setPendingFiles([]);
+      }
+
+      // Send text message if any
+      if (text.trim()) {
+        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'text', content: text.trim() }) });
+        setText('');
+      }
+
+      await fetchMsgs();
     } catch (e) { console.error(e); }
     setSending(false);
   };
 
-  const onAttach = async (f?: File) => {
-    const file = f || (inputRef.current?.files ? inputRef.current.files[0] : null);
-    if (!file) return;
+  // Immediate upload helper used for non-chat contexts (dropzone elsewhere)
+  const uploadFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return [];
     setFileBusy(true);
     try {
-      const fd = new FormData(); fd.append('file', file);
-      const r = await fetch('/api/upload', { method: 'POST', body: fd });
+      const fd = new FormData();
+      for (const f of files) fd.append('file', f);
+      const r = await fetch('/api/upload?subfolder=chatdata', { method: 'POST', body: fd });
       const j = await r.json();
-      const uploaded = j.uploaded && j.uploaded[0];
-      if (uploaded) {
-        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'file', file: uploaded, content: uploaded }) });
-        await fetchMsgs();
+      const uploaded: string[] = j.uploaded || [];
+      // create a message per uploaded file
+      for (const name of uploaded) {
+        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'file', file: name, content: name }) });
       }
-    } catch (e) { console.error(e); }
-    setFileBusy(false);
+      await fetchMsgs();
+      return uploaded;
+    } catch (e) { console.error(e); return []; }
+    finally { setFileBusy(false); }
   };
 
-  const onDrop = async (e: React.DragEvent) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files[0]) await onAttach(e.dataTransfer.files[0]); };
+  // Queue attachment for chat input preview (no immediate upload)
+  const queueAttachment = (file: File) => {
+    const id = String(Date.now()) + Math.random().toString(36).slice(2,8);
+    const preview = file.type.startsWith('image/') || file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined;
+    setPendingFiles(p => [...p, { id, file, preview }]);
+  };
+
+  const removePending = (id: string) => {
+    setPendingFiles(p => {
+      const found = p.find(x => x.id === id);
+      if (found && found.preview) {
+        try { URL.revokeObjectURL(found.preview); } catch (e) {}
+      }
+      return p.filter(x => x.id !== id);
+    });
+  };
+
+  const onDrop = async (e: React.DragEvent) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    // If drop happened while chat input focused, queue; otherwise upload to shared folder
+    const active = document.activeElement as HTMLElement | null;
+    const chatFocused = !!(active && active.closest && active.closest('[data-chat-input]'));
+    const files = Array.from(e.dataTransfer.files as FileList);
+    if (chatFocused) {
+      for (const f of files) queueAttachment(f);
+    } else {
+      await uploadFiles(files);
+    }
+  } };
 
   const deleteMsg = async (id: string) => {
     try {
@@ -173,11 +219,27 @@ export default function ChatPanel() {
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>Personal chat</div>
       </div>
       <div ref={listRef} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
-      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && onAttach(e.target.files[0])} />
-        <button onClick={() => inputRef.current?.click()} className="btn-icon">📎</button>
-        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-        <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
+        {pendingFiles.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
+            {pendingFiles.map(pf => (
+              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: 6, background: 'var(--surface)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                {pf.preview ? <img src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{pf.file.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{(pf.file.size/1024).toFixed(0)} KB</div>
+                </div>
+                <button onClick={() => removePending(pf.id)} className="btn-cancel" style={{ marginLeft: 6 }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center' }}>
+          <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && queueAttachment(e.target.files[0])} />
+          <button onClick={() => fileInputRef.current?.click()} className="btn-icon">📎</button>
+          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+          <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+        </div>
       </div>
     </div>
   );
@@ -191,11 +253,27 @@ export default function ChatPanel() {
         </div>
       </div>
       <div ref={listRef} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
-      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && onAttach(e.target.files[0])} />
-        <button onClick={() => inputRef.current?.click()} className="btn-icon">📎</button>
-        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-        <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
+        {pendingFiles.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
+            {pendingFiles.map(pf => (
+              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: 6, background: 'var(--surface)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                {pf.preview ? <img src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{pf.file.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{(pf.file.size/1024).toFixed(0)} KB</div>
+                </div>
+                <button onClick={() => removePending(pf.id)} className="btn-cancel" style={{ marginLeft: 6 }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center' }}>
+          <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && queueAttachment(e.target.files[0])} />
+          <button onClick={() => fileInputRef.current?.click()} className="btn-icon">📎</button>
+          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+          <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+        </div>
       </div>
     </div>
   );
@@ -213,6 +291,65 @@ export default function ChatPanel() {
       </div>
     </div>
   ) : null;
+
+  // Paste handling: route clipboard data to chat input when focused, otherwise treat as file-drop
+  useEffect(() => {
+    const onPaste = async (ev: ClipboardEvent) => {
+      try {
+        const e = ev as ClipboardEvent & { clipboardData: DataTransfer };
+        const active = document.activeElement;
+        const target = (ev.target as HTMLElement) || null;
+        const targetIsInChatInput = !!(target && (target.closest && target.closest('[data-chat-input]')));
+        const isInputFocused = !!(textInputRef.current && (active === textInputRef.current || textInputRef.current.contains(active) || targetIsInChatInput));
+
+        // If there are files in clipboard
+        const items = e.clipboardData?.items || [];
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (it.kind === 'file') {
+            const file = it.getAsFile();
+            if (file) {
+              // Only intercept when the chat input is focused/targeted.
+              if (!isInputFocused) {
+                // Let other handlers (drop/share window) handle the paste.
+                return;
+              }
+              // prevent default and stop other listeners so we don't double-upload
+              ev.preventDefault();
+              try { (ev as any).stopImmediatePropagation?.(); } catch (err) { /* ignore */ }
+              ev.stopPropagation();
+              // Queue file for chat preview
+              queueAttachment(file);
+              return;
+            }
+          }
+        }
+
+        // No files — if text and input focused, paste into input at cursor
+        const textData = e.clipboardData?.getData('text');
+        if (textData) {
+          if (!isInputFocused) return; // let other handlers process
+          if (isInputFocused && textInputRef.current) {
+            ev.preventDefault();
+            try { (ev as any).stopImmediatePropagation?.(); } catch (err) { /* ignore */ }
+            ev.stopPropagation();
+            const inp = textInputRef.current as HTMLInputElement;
+            const start = inp.selectionStart ?? text.length;
+            const end = inp.selectionEnd ?? text.length;
+            const newText = text.slice(0, start) + textData + text.slice(end);
+            setText(newText);
+            setTimeout(() => {
+              try { inp.selectionStart = inp.selectionEnd = start + textData.length; inp.focus(); } catch (err) { /* ignore */ }
+            }, 0);
+          }
+        }
+      } catch (err) {
+        // swallow
+      }
+    };
+    document.addEventListener('paste', onPaste as EventListener, true);
+    return () => document.removeEventListener('paste', onPaste as EventListener, true);
+  }, [text]);
 
   return (
     <>

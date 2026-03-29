@@ -438,6 +438,8 @@ export default function Home() {
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       try {
+        const tgt = (e.target as HTMLElement | null);
+        if (tgt && tgt.closest && tgt.closest('[data-chat-input]')) return; // ignore paste when chat input targeted
         const clipboard = (e.clipboardData || (window as any).clipboardData) as DataTransfer | undefined;
         if (!clipboard) return;
         const files: File[] = [];
@@ -465,6 +467,8 @@ export default function Home() {
     // Handle Ctrl/Cmd+V even when paste event may not fire on the window
     const onKeyDown = async (e: KeyboardEvent) => {
       if (!((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V'))) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active.closest && active.closest('[data-chat-input]')) return; // ignore Ctrl/Cmd+V when chat input focused
       // Try the async Clipboard API first (may provide images)
       try {
         const nav = navigator as any;

@@ -4,8 +4,11 @@ import path from 'path';
 import { SHARED_DIR, ensureSharedDir } from '@/lib/files';
 
 ensureSharedDir();
+// Ensure a dedicated chat data folder exists under the shared directory
+const CHAT_DIR = path.join(SHARED_DIR, 'chatdata');
+if (!fs.existsSync(CHAT_DIR)) fs.mkdirSync(CHAT_DIR, { recursive: true });
 
-const MSG_FILE = path.join(SHARED_DIR, 'shared_messages.json');
+const MSG_FILE = path.join(CHAT_DIR, 'shared_messages.json');
 
 type Message = {
   id: string;
