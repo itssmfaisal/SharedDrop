@@ -26,6 +26,8 @@ export default function ChatPanel() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
   const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; file: File; preview?: string }>>([]);
+  const [modalSrc, setModalSrc] = useState<string | null>(null);
+  const [modalType, setModalType] = useState<'image' | 'video' | null>(null);
 
   const fetchMsgs = async () => {
     try {
@@ -97,6 +99,24 @@ export default function ChatPanel() {
     const preview = file.type.startsWith('image/') || file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined;
     setPendingFiles(p => [...p, { id, file, preview }]);
   };
+
+  const openMedia = (src: string, type: 'image' | 'video') => {
+    setModalSrc(src);
+    setModalType(type);
+    try { document.body.style.overflow = 'hidden'; } catch (e) {}
+  };
+
+  const closeMedia = () => {
+    setModalSrc(null);
+    setModalType(null);
+    try { document.body.style.overflow = ''; } catch (e) {}
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && modalSrc) closeMedia(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [modalSrc]);
 
   const removePending = (id: string) => {
     setPendingFiles(p => {
@@ -184,19 +204,52 @@ export default function ChatPanel() {
         </div>
       )}
       {m.type === 'file' && m.file && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div style={{ width: 56, height: 56, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, display: 'grid', placeItems: 'center' }}>📄</div>
-          <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontWeight: 700 }}>{m.file}</div>
-            <a style={{ color: 'var(--accent)', fontSize: 12 }} href={`/api/download?name=${encodeURIComponent(m.file)}`} download>Download</a>
-          </div>
-        </div>
+        (() => {
+          const name = m.file || '';
+          const lower = name.toLowerCase();
+          const isImage = /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(lower);
+          const isVideo = /\.(mp4|webm|ogg|mov|mkv)$/.test(lower);
+          const url = `/api/download?subfolder=chatdata&name=${encodeURIComponent(name)}`;
+          if (isImage) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <img onClick={() => openMedia(url, 'image')} src={url} alt="image" style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 8, cursor: 'zoom-in' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+                </div>
+              </div>
+            );
+          }
+          if (isVideo) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <video onClick={() => openMedia(url, 'video')} controls style={{ width: '100%', maxHeight: 420, borderRadius: 8, background: '#000', cursor: 'pointer' }}>
+                  <source src={url} />
+                  Your browser does not support the video tag.
+                </video>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+                </div>
+              </div>
+            );
+          }
+          // fallback for other file types: show icon + filename + download
+          return (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ width: 56, height: 56, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, display: 'grid', placeItems: 'center' }}>📄</div>
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontWeight: 700 }}>{name}</div>
+                <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+              </div>
+            </div>
+          );
+        })()
       )}
       {m.type === 'link' && m.preview && (
         <div>
           <div style={{ fontWeight: 700 }}>{m.preview.title || m.content}</div>
           {m.preview.description && <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>{m.preview.description}</div>}
-          {m.preview.image && <img src={m.preview.image} style={{ width: '100%', marginTop: 8, borderRadius: 8, maxHeight: 180, objectFit: 'cover' }} />}
+                {m.preview.image && <img onClick={() => openMedia(m.preview!.image!, 'image')} src={m.preview.image} style={{ width: '100%', marginTop: 8, borderRadius: 8, maxHeight: 180, objectFit: 'cover', cursor: 'zoom-in' }} />}
           <div style={{ marginTop: 8 }}><a href={m.content} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>{m.content}</a></div>
         </div>
       )}
@@ -224,7 +277,7 @@ export default function ChatPanel() {
           <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
             {pendingFiles.map(pf => (
               <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: 6, background: 'var(--surface)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                {pf.preview ? <img src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
+                {pf.preview ? <img onClick={() => openMedia(pf.preview!, 'image')} src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, cursor: 'zoom-in' }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{pf.file.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{(pf.file.size/1024).toFixed(0)} KB</div>
@@ -289,6 +342,19 @@ export default function ChatPanel() {
         <button onClick={() => { setConfirmDeleteId(null); setConfirmPos(null); }} className="btn-cancel" style={{ padding: '6px 10px' }}>Cancel</button>
         <button onClick={async () => { if (confirmDeleteId) { await deleteMsg(confirmDeleteId); setConfirmDeleteId(null); setConfirmPos(null); } }} style={{ background: 'var(--danger, #e85)', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6 }}>Delete</button>
       </div>
+    </div>
+  ) : null;
+
+  const mediaModal = modalSrc ? (
+    <div onClick={closeMedia} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30000 }}>
+      <div onClick={e => e.stopPropagation()} style={{ maxWidth: '96%', maxHeight: '96%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {modalType === 'image' ? (
+          <img src={modalSrc as string} alt="full" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+        ) : (
+          <video controls autoPlay src={modalSrc as string} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, background: '#000' }} />
+        )}
+      </div>
+      <button onClick={closeMedia} aria-label="Close" style={{ position: 'fixed', right: 16, top: 16, background: 'transparent', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer' }}>✕</button>
     </div>
   ) : null;
 
@@ -357,6 +423,7 @@ export default function ChatPanel() {
       {isMobile && !mobileOpen && mobileFab}
       {isMobile && mobileOpen && mobilePanel}
       {confirmPopup}
+      {mediaModal}
     </>
   );
 }
