@@ -83,6 +83,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ message: msg });
   }
 
-  res.setHeader('Allow', 'GET,POST');
+  if (req.method === 'PUT') {
+    const body = req.body as any || {};
+    const id = body.id;
+    const content = body.content;
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+    const msgs = readMessages();
+    const idx = msgs.findIndex(m => m.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'Not found' });
+    msgs[idx].content = typeof content === 'string' ? content : msgs[idx].content;
+    try { writeMessages(msgs); } catch (e) { return res.status(500).json({ error: 'Failed to save' }); }
+    return res.status(200).json({ message: msgs[idx] });
+  }
+
+  if (req.method === 'DELETE') {
+    const body = req.body as any || {};
+    const id = body.id;
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+    const msgs = readMessages();
+    const filtered = msgs.filter(m => m.id !== id);
+    try { writeMessages(filtered); } catch (e) { return res.status(500).json({ error: 'Failed to save' }); }
+    return res.status(200).json({ success: true });
+  }
+
+  res.setHeader('Allow', 'GET,POST,PUT,DELETE');
   res.status(405).end();
 }
