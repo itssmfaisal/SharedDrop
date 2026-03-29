@@ -360,7 +360,7 @@ export default function ChatPanel() {
 
   // Paste handling: route clipboard data to chat input when focused, otherwise treat as file-drop
   useEffect(() => {
-    const onPaste = async (ev: ClipboardEvent) => {
+    const onPaste = async (ev: Event) => {
       try {
         const e = ev as ClipboardEvent & { clipboardData: DataTransfer };
         const active = document.activeElement;
@@ -381,9 +381,9 @@ export default function ChatPanel() {
                 return;
               }
               // prevent default and stop other listeners so we don't double-upload
-              ev.preventDefault();
+              (ev as Event & { preventDefault?: () => void }).preventDefault?.();
               try { (ev as any).stopImmediatePropagation?.(); } catch (err) { /* ignore */ }
-              ev.stopPropagation();
+              (ev as Event & { stopPropagation?: () => void }).stopPropagation?.();
               // Queue file for chat preview
               queueAttachment(file);
               return;
@@ -396,9 +396,9 @@ export default function ChatPanel() {
         if (textData) {
           if (!isInputFocused) return; // let other handlers process
           if (isInputFocused && textInputRef.current) {
-            ev.preventDefault();
+            (ev as Event & { preventDefault?: () => void }).preventDefault?.();
             try { (ev as any).stopImmediatePropagation?.(); } catch (err) { /* ignore */ }
-            ev.stopPropagation();
+            (ev as Event & { stopPropagation?: () => void }).stopPropagation?.();
             const inp = textInputRef.current as HTMLInputElement;
             const start = inp.selectionStart ?? text.length;
             const end = inp.selectionEnd ?? text.length;

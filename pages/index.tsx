@@ -436,11 +436,12 @@ export default function Home() {
 
   // Paste-to-upload: listen for images pasted from clipboard (Ctrl/Cmd+V)
   useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => {
+    const onPaste = (e: Event) => {
+      const ev = e as ClipboardEvent & { clipboardData?: DataTransfer };
       try {
-        const tgt = (e.target as HTMLElement | null);
+        const tgt = (ev.target as HTMLElement | null);
         if (tgt && tgt.closest && tgt.closest('[data-chat-input]')) return; // ignore paste when chat input targeted
-        const clipboard = (e.clipboardData || (window as any).clipboardData) as DataTransfer | undefined;
+        const clipboard = (ev.clipboardData || (window as any).clipboardData) as DataTransfer | undefined;
         if (!clipboard) return;
         const files: File[] = [];
         for (let i = 0; i < clipboard.items.length; i++) {
@@ -457,7 +458,7 @@ export default function Home() {
         if (files.length > 0) {
           // Show confirmation modal (reuse choose-file preview flow)
           setPendingFiles(files);
-          e.preventDefault();
+          ev.preventDefault?.();
         }
       } catch (err) {
         console.error('paste upload error', err);
@@ -465,8 +466,9 @@ export default function Home() {
     };
 
     // Handle Ctrl/Cmd+V even when paste event may not fire on the window
-    const onKeyDown = async (e: KeyboardEvent) => {
-      if (!((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V'))) return;
+    const onKeyDown = async (e: Event) => {
+      const ev = e as KeyboardEvent;
+      if (!((ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V'))) return;
       const active = document.activeElement as HTMLElement | null;
       if (active && active.closest && active.closest('[data-chat-input]')) return; // ignore Ctrl/Cmd+V when chat input focused
       // Try the async Clipboard API first (may provide images)
@@ -487,7 +489,7 @@ export default function Home() {
           }
           if (files.length > 0) {
             setPendingFiles(files);
-            e.preventDefault();
+            ev.preventDefault?.();
           }
         }
       } catch (err) {
