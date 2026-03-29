@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+
+const ChatPanel = dynamic(() => import('../components/ChatPanel'), { ssr: false });
 
 interface FileInfo {
   name: string;
@@ -972,6 +975,7 @@ export default function Home() {
       )}
 
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
+      <ChatPanel />
     </>
   );
 }
