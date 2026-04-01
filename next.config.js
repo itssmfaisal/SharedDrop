@@ -6,6 +6,6 @@
 module.exports = {
   reactStrictMode: true,
   poweredByHeader: false,
-  basePath: '/ftp-server',
-  assetPrefix: '/ftp-server',
+  basePath: '',
+  assetPrefix: '',
 };

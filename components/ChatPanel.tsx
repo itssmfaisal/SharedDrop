@@ -18,7 +18,7 @@ export default function ChatPanel() {
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
   const [hoveredMsg, setHoveredMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,6 +48,14 @@ export default function ChatPanel() {
   }, []);
 
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
+
+  useEffect(() => {
+    if (!panelOpen) {
+      setDropdownOpen(null);
+      setConfirmDeleteId(null);
+      setConfirmPos(null);
+    }
+  }, [panelOpen]);
 
   const sendText = async () => {
     if (!text.trim() && pendingFiles.length === 0) return;
@@ -266,7 +274,7 @@ export default function ChatPanel() {
   );
 
   const desktopPanel = (
-    <div style={{ position: 'fixed', right: 18, top: 18, width: 360, bottom: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
+    <div style={{ position: 'fixed', right: 18, top: 18, width: 360, bottom: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', boxShadow: '0 20px 60px rgba(0,0,0,0.6)', zIndex: 40 }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ fontWeight: 800 }}>Me</div>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>Personal chat</div>
@@ -298,11 +306,11 @@ export default function ChatPanel() {
   );
 
   const mobilePanel = (
-    <div style={{ position: 'fixed', left: 8, right: 8, bottom: 8, height: '72vh', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', zIndex: 9999 }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
+    <div style={{ position: 'fixed', left: 8, right: 8, bottom: 8, height: '72vh', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', zIndex: 40 }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ fontWeight: 800 }}>Me</div>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>
-          <button className="btn-cancel" onClick={() => setMobileOpen(false)}>Close</button>
+          <button className="btn-cancel" onClick={() => setPanelOpen(false)}>Close</button>
         </div>
       </div>
       <div ref={listRef} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
@@ -332,8 +340,16 @@ export default function ChatPanel() {
   );
 
   const mobileFab = (
-    <button onClick={() => setMobileOpen(true)} style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 9999, width: 56, height: 56, borderRadius: 999, background: 'var(--accent)', color: '#fff', border: 'none', boxShadow: '0 8px 30px rgba(108,99,255,0.35)', fontSize: 20 }} aria-label="Open chat">💬</button>
+    <button onClick={() => setPanelOpen(v => !v)} style={{ position: 'fixed', right: isMobile ? 84 : 18, bottom: 18, zIndex: 45, width: 56, height: 56, borderRadius: 999, background: panelOpen ? 'var(--surface2)' : 'var(--accent)', color: '#fff', border: panelOpen ? '1px solid var(--border)' : 'none', boxShadow: panelOpen ? '0 8px 30px rgba(0,0,0,0.28)' : '0 8px 30px rgba(108,99,255,0.35)', fontSize: 20 }} aria-label={panelOpen ? 'Close chat' : 'Open chat'}>{panelOpen ? '✕' : '💬'}</button>
   );
+
+  const panelBackdrop = panelOpen ? (
+    <div
+      onClick={() => setPanelOpen(false)}
+      style={{ position: 'fixed', inset: 0, zIndex: 35, background: 'rgba(0,0,0,0.12)' }}
+      aria-hidden="true"
+    />
+  ) : null;
 
   const confirmPopup = confirmDeleteId && confirmPos ? (
     <div style={{ position: 'fixed', top: confirmPos.top, left: confirmPos.left, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, boxShadow: '0 12px 30px rgba(0,0,0,0.3)', zIndex: 20000, minWidth: 220 }} data-dropdown-id={confirmDeleteId}>
@@ -419,9 +435,10 @@ export default function ChatPanel() {
 
   return (
     <>
-      {!isMobile && desktopPanel}
-      {isMobile && !mobileOpen && mobileFab}
-      {isMobile && mobileOpen && mobilePanel}
+      {panelBackdrop}
+      {panelOpen && !isMobile && desktopPanel}
+      {panelOpen && isMobile && mobilePanel}
+      {mobileFab}
       {confirmPopup}
       {mediaModal}
     </>
