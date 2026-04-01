@@ -17,6 +17,7 @@ export default function ChatPanel() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
   const [isMobile, setIsMobile] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
@@ -29,8 +30,24 @@ export default function ChatPanel() {
   const [modalSrc, setModalSrc] = useState<string | null>(null);
   const [modalType, setModalType] = useState<'image' | 'video' | null>(null);
 
+  const isNearBottom = (el: HTMLDivElement) => {
+    const threshold = 64;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    return distance <= threshold;
+  };
+
+  const updateStickiness = () => {
+    const el = listRef.current;
+    if (!el) return;
+    shouldStickToBottomRef.current = isNearBottom(el);
+  };
+
   const fetchMsgs = async () => {
     try {
+      const el = listRef.current;
+      if (el) {
+        shouldStickToBottomRef.current = isNearBottom(el);
+      }
       const r = await fetch('/api/messages');
       if (!r.ok) return;
       const d = await r.json();
@@ -47,7 +64,13 @@ export default function ChatPanel() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    if (shouldStickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (!panelOpen) {
@@ -55,6 +78,16 @@ export default function ChatPanel() {
       setConfirmDeleteId(null);
       setConfirmPos(null);
     }
+  }, [panelOpen]);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    shouldStickToBottomRef.current = true;
+    requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    });
   }, [panelOpen]);
 
   const sendText = async () => {
@@ -279,7 +312,7 @@ export default function ChatPanel() {
         <div style={{ fontWeight: 800 }}>Me</div>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>Personal chat</div>
       </div>
-      <div ref={listRef} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
+      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
       <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
         {pendingFiles.length > 0 && (
           <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
@@ -313,7 +346,7 @@ export default function ChatPanel() {
           <button className="btn-cancel" onClick={() => setPanelOpen(false)}>Close</button>
         </div>
       </div>
-      <div ref={listRef} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
+      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
       <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
         {pendingFiles.length > 0 && (
           <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
