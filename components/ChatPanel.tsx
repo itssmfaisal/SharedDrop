@@ -94,18 +94,20 @@ export default function ChatPanel() {
     if (!text.trim() && pendingFiles.length === 0) return;
     setSending(true);
     try {
+      const caption = text.trim();
       // If there are pending attachments, upload them first
       if (pendingFiles.length > 0) {
         const files = pendingFiles.map(p => p.file);
-        await uploadFiles(files);
+        await uploadFiles(files, caption);
         // revoke object URLs
         pendingFiles.forEach(p => { if (p.preview) try { URL.revokeObjectURL(p.preview); } catch (e) {} });
         setPendingFiles([]);
+        setText('');
       }
 
-      // Send text message if any
-      if (text.trim()) {
-        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'text', content: text.trim() }) });
+      // Send standalone text only when there are no attachments
+      if (pendingFiles.length === 0 && caption) {
+        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'text', content: caption }) });
         setText('');
       }
 
@@ -115,7 +117,7 @@ export default function ChatPanel() {
   };
 
   // Immediate upload helper used for non-chat contexts (dropzone elsewhere)
-  const uploadFiles = async (files: File[]) => {
+  const uploadFiles = async (files: File[], caption = '') => {
     if (!files || files.length === 0) return [];
     setFileBusy(true);
     try {
@@ -125,8 +127,10 @@ export default function ChatPanel() {
       const j = await r.json();
       const uploaded: string[] = j.uploaded || [];
       // create a message per uploaded file
-      for (const name of uploaded) {
-        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'file', file: name, content: name }) });
+      for (let i = 0; i < uploaded.length; i++) {
+        const name = uploaded[i];
+        const messageContent = caption && i === 0 ? caption : '';
+        await fetch('/api/messages', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'file', file: name, content: messageContent }) });
       }
       await fetchMsgs();
       return uploaded;
@@ -206,7 +210,7 @@ export default function ChatPanel() {
   }, []);
 
   const renderMsgBubble = (m: Msg) => (
-    <div key={m.id} data-msg-id={m.id} style={{ alignSelf: 'flex-start', maxWidth: isMobile ? '100%' : '88%', background: m.type === 'file' ? (isMobile ? 'linear-gradient(90deg,#222232,#16161b)' : 'linear-gradient(90deg,#232346,#18182b)') : (isMobile ? 'var(--surface2)' : 'var(--bubble-bg, #232346)'), borderRadius: 10, padding: 10, paddingRight: isMobile ? 32 : 40, overflow: 'visible', color: 'var(--text)', fontSize: 13, position: 'relative', boxShadow: isMobile ? undefined : '0 2px 8px rgba(0,0,0,0.08)', marginBottom: 2 }} onMouseEnter={() => setHoveredMsg(m.id)} onMouseLeave={() => setHoveredMsg(null)}>
+    <div key={m.id} data-msg-id={m.id} style={{ alignSelf: 'flex-start', maxWidth: isMobile ? '100%' : '88%', background: m.type === 'file' ? 'linear-gradient(135deg, rgba(34,59,108,0.5), rgba(20,33,66,0.38))' : 'linear-gradient(135deg, rgba(26,41,82,0.46), rgba(15,26,52,0.34))', border: '1px solid rgba(112,146,212,0.3)', borderRadius: 14, padding: 10, paddingRight: isMobile ? 32 : 40, overflow: 'visible', color: 'var(--text)', fontSize: 13, position: 'relative', boxShadow: '0 12px 28px rgba(2,6,20,0.45)', marginBottom: 2, backdropFilter: 'blur(10px) saturate(130%)', WebkitBackdropFilter: 'blur(10px) saturate(130%)' }} onMouseEnter={() => setHoveredMsg(m.id)} onMouseLeave={() => setHoveredMsg(null)}>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>{new Date(m.createdAt).toLocaleString()}</div>
       {(m.type === 'text' || m.type === 'link') && (
         <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }} data-dropdown-id={m.id}>
@@ -247,6 +251,8 @@ export default function ChatPanel() {
       {m.type === 'file' && m.file && (
         (() => {
           const name = m.file || '';
+          const caption = (m.content || '').trim();
+          const showCaption = !!caption && caption !== name;
           const lower = name.toLowerCase();
           const isImage = /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(lower);
           const isVideo = /\.(mp4|webm|ogg|mov|mkv)$/.test(lower);
@@ -255,8 +261,15 @@ export default function ChatPanel() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <img onClick={() => openMedia(url, 'image')} src={url} alt="image" style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 8, cursor: 'zoom-in' }} />
+                {showCaption && <div style={{ whiteSpace: 'pre-wrap' }}>{caption}</div>}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+                  <a style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, lineHeight: 1, textDecoration: 'none' }} href={url} download title="Download" aria-label="Download">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 4v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M8.5 11.5 12 15l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </a>
                 </div>
               </div>
             );
@@ -268,8 +281,15 @@ export default function ChatPanel() {
                   <source src={url} />
                   Your browser does not support the video tag.
                 </video>
+                {showCaption && <div style={{ whiteSpace: 'pre-wrap' }}>{caption}</div>}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+                  <a style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, lineHeight: 1, textDecoration: 'none' }} href={url} download title="Download" aria-label="Download">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 4v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M8.5 11.5 12 15l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </a>
                 </div>
               </div>
             );
@@ -279,8 +299,15 @@ export default function ChatPanel() {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <div style={{ width: 56, height: 56, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, display: 'grid', placeItems: 'center' }}>📄</div>
               <div style={{ overflow: 'hidden' }}>
+                {showCaption && <div style={{ marginBottom: 4, whiteSpace: 'pre-wrap' }}>{caption}</div>}
                 <div style={{ fontWeight: 700 }}>{name}</div>
-                <a style={{ color: 'var(--accent)', fontSize: 12 }} href={url} download>Download</a>
+                <a style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, lineHeight: 1, textDecoration: 'none' }} href={url} download title="Download" aria-label="Download">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 4v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M8.5 11.5 12 15l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </a>
               </div>
             </div>
           );
@@ -307,17 +334,20 @@ export default function ChatPanel() {
   );
 
   const desktopPanel = (
-    <div style={{ position: 'fixed', right: 18, top: 18, width: 360, bottom: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', boxShadow: '0 20px 60px rgba(0,0,0,0.6)', zIndex: 40 }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
-      <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ position: 'fixed', right: 18, top: 18, width: 360, bottom: 18, background: 'linear-gradient(165deg, rgba(26,43,84,0.74), rgba(10,17,36,0.64))', border: '1px solid rgba(101,132,196,0.34)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'visible', boxShadow: '0 28px 80px rgba(2,6,20,0.62)', zIndex: 400, backdropFilter: 'blur(16px) saturate(135%)', WebkitBackdropFilter: 'blur(16px) saturate(135%)' }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
+      <div style={{ padding: 12, borderBottom: '1px solid rgba(96,126,188,0.32)', background: 'linear-gradient(180deg, rgba(33,54,102,0.5), rgba(15,25,51,0.3))', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ fontWeight: 800 }}>Me</div>
-        <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>Personal chat</div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>Personal chat</div>
+          <button className="btn-cancel" onClick={() => setPanelOpen(false)} style={{ padding: '6px 10px' }}>Close</button>
+        </div>
       </div>
-      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
-      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
+      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10, background: 'linear-gradient(180deg, rgba(22,35,70,0.35), rgba(9,16,33,0.3))' }}>{messages.map(renderMsgBubble)}</div>
+      <div style={{ padding: 10, borderTop: '1px solid rgba(96,126,188,0.32)', background: 'linear-gradient(180deg, rgba(31,49,94,0.45), rgba(13,23,46,0.32))', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
         {pendingFiles.length > 0 && (
           <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
             {pendingFiles.map(pf => (
-              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: 6, background: 'var(--surface)', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid rgba(105,136,198,0.28)', borderRadius: 10, padding: 6, background: 'linear-gradient(135deg, rgba(36,58,108,0.42), rgba(16,27,54,0.3))', display: 'flex', gap: 8, alignItems: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
                 {pf.preview ? <img onClick={() => openMedia(pf.preview!, 'image')} src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, cursor: 'zoom-in' }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{pf.file.name}</div>
@@ -331,27 +361,27 @@ export default function ChatPanel() {
         <div style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center' }}>
           <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && queueAttachment(e.target.files[0])} />
           <button onClick={() => fileInputRef.current?.click()} className="btn-icon">📎</button>
-          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-          <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 10, background: 'rgba(14,24,49,0.72)', border: '1px solid rgba(95,127,193,0.36)', color: 'var(--text)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }} />
+          <button onClick={sendText} style={{ background: 'linear-gradient(135deg, #2f4f9a, #1f3368)', color: '#fff', borderRadius: 10, padding: '8px 12px', border: '1px solid rgba(117,149,214,0.35)', cursor: 'pointer', boxShadow: '0 10px 20px rgba(4,10,29,0.5)' }}>{sending ? '…' : 'Send'}</button>
         </div>
       </div>
     </div>
   );
 
   const mobilePanel = (
-    <div style={{ position: 'fixed', left: 8, right: 8, bottom: 8, height: '72vh', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'visible', zIndex: 40 }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
-      <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ position: 'fixed', left: 8, right: 8, bottom: 8, height: '72vh', background: 'linear-gradient(165deg, rgba(26,43,84,0.74), rgba(10,17,36,0.64))', border: '1px solid rgba(101,132,196,0.34)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'visible', zIndex: 400, backdropFilter: 'blur(16px) saturate(135%)', WebkitBackdropFilter: 'blur(16px) saturate(135%)' }} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
+      <div style={{ padding: 12, borderBottom: '1px solid rgba(96,126,188,0.32)', background: 'linear-gradient(180deg, rgba(33,54,102,0.5), rgba(15,25,51,0.3))', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ fontWeight: 800 }}>Me</div>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>
           <button className="btn-cancel" onClick={() => setPanelOpen(false)}>Close</button>
         </div>
       </div>
-      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>{messages.map(renderMsgBubble)}</div>
-      <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
+      <div ref={listRef} onScroll={updateStickiness} style={{ padding: 12, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10, background: 'linear-gradient(180deg, rgba(22,35,70,0.35), rgba(9,16,33,0.3))' }}>{messages.map(renderMsgBubble)}</div>
+      <div style={{ padding: 10, borderTop: '1px solid rgba(96,126,188,0.32)', background: 'linear-gradient(180deg, rgba(31,49,94,0.45), rgba(13,23,46,0.32))', display: 'flex', gap: 8, alignItems: 'center', flexDirection: 'column' }}>
         {pendingFiles.length > 0 && (
           <div style={{ display: 'flex', gap: 8, width: '100%', overflowX: 'auto', paddingBottom: 8 }}>
             {pendingFiles.map(pf => (
-              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: 6, background: 'var(--surface)', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div key={pf.id} style={{ minWidth: 80, maxWidth: 220, border: '1px solid rgba(105,136,198,0.28)', borderRadius: 10, padding: 6, background: 'linear-gradient(135deg, rgba(36,58,108,0.42), rgba(16,27,54,0.3))', display: 'flex', gap: 8, alignItems: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
                 {pf.preview ? <img src={pf.preview} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 56, height: 56, display: 'grid', placeItems: 'center' }}>📎</div>}
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{pf.file.name}</div>
@@ -365,21 +395,21 @@ export default function ChatPanel() {
         <div style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center' }}>
           <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => e.target.files && queueAttachment(e.target.files[0])} />
           <button onClick={() => fileInputRef.current?.click()} className="btn-icon">📎</button>
-          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-          <button onClick={sendText} style={{ background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '8px 12px', border: 'none', cursor: 'pointer' }}>{sending ? '…' : 'Send'}</button>
+          <input data-chat-input ref={textInputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendText()} placeholder="Message yourself…" style={{ flex: 1, padding: '8px 10px', borderRadius: 10, background: 'rgba(14,24,49,0.72)', border: '1px solid rgba(95,127,193,0.36)', color: 'var(--text)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }} />
+          <button onClick={sendText} style={{ background: 'linear-gradient(135deg, #2f4f9a, #1f3368)', color: '#fff', borderRadius: 10, padding: '8px 12px', border: '1px solid rgba(117,149,214,0.35)', cursor: 'pointer', boxShadow: '0 10px 20px rgba(4,10,29,0.5)' }}>{sending ? '…' : 'Send'}</button>
         </div>
       </div>
     </div>
   );
 
-  const mobileFab = (
-    <button onClick={() => setPanelOpen(v => !v)} style={{ position: 'fixed', right: isMobile ? 84 : 18, bottom: 18, zIndex: 45, width: 56, height: 56, borderRadius: 999, background: panelOpen ? 'var(--surface2)' : 'var(--accent)', color: '#fff', border: panelOpen ? '1px solid var(--border)' : 'none', boxShadow: panelOpen ? '0 8px 30px rgba(0,0,0,0.28)' : '0 8px 30px rgba(108,99,255,0.35)', fontSize: 20 }} aria-label={panelOpen ? 'Close chat' : 'Open chat'}>{panelOpen ? '✕' : '💬'}</button>
+  const mobileFab = panelOpen ? null : (
+    <button onClick={() => setPanelOpen(v => !v)} style={{ position: 'fixed', right: isMobile ? 84 : 18, bottom: 18, zIndex: 45, width: 56, height: 56, borderRadius: 999, background: 'var(--accent)', color: '#fff', border: 'none', boxShadow: '0 8px 30px rgba(108,99,255,0.35)', fontSize: 20 }} aria-label="Open chat">💬</button>
   );
 
   const panelBackdrop = panelOpen ? (
     <div
       onClick={() => setPanelOpen(false)}
-      style={{ position: 'fixed', inset: 0, zIndex: 35, background: 'rgba(0,0,0,0.12)' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 390, background: 'linear-gradient(180deg, rgba(5,10,22,0.5), rgba(3,7,16,0.62))', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)' }}
       aria-hidden="true"
     />
   ) : null;

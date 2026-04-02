@@ -65,7 +65,7 @@ function PinScreen({ onUnlock }: { onUnlock: () => void }) {
 
   return (
     <div style={{ minHeight:'100vh', display:'grid', placeItems:'center', background:'var(--bg)' }}>
-      <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, padding:'40px 36px', width:340, textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.5)' }}>
+      <div style={{ background:'linear-gradient(145deg, rgba(28,46,88,0.6), rgba(12,20,40,0.5))', border:'1px solid var(--border)', borderRadius:20, padding:'40px 36px', width:340, textAlign:'center', boxShadow:'0 20px 60px rgba(2,6,20,0.5)', backdropFilter:'blur(14px)', WebkitBackdropFilter:'blur(14px)' }}>
         <div style={{ fontSize:'2.5rem', marginBottom:16 }}>🔐</div>
         <h2 style={{ fontWeight:800, marginBottom:6 }}>SharedDrop</h2>
         <p style={{ color:'var(--muted)', fontSize:'0.84rem', marginBottom:24 }}>Enter PIN to access shared files</p>
@@ -177,7 +177,7 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(0,0,0,0.6)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:'linear-gradient(145deg, rgba(28,46,88,0.6), rgba(12,20,40,0.5))', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(2,6,20,0.5)', backdropFilter:'blur(14px)', WebkitBackdropFilter:'blur(14px)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:24 }}>
           <div style={{ fontWeight:700, fontSize:'0.9rem' }}>{file.name}</div>
           <button className="btn-del" onClick={onClose} style={{ color:'var(--muted)' }}>✕</button>
@@ -580,7 +580,7 @@ export default function Home() {
   if (pinRequired && !authed) return (
     <>
       <Head><title>SharedDrop</title><link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" /></Head>
-      <style>{`:root{--bg:#0a0a0f;--surface:#111118;--surface2:#18181f;--border:#2a2a35;--accent:#6c63ff;--accent2:#ff6584;--green:#00d68f;--text:#e8e8f0;--muted:#6b6b80;}*{box-sizing:border-box;margin:0;padding:0;}body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;}`}</style>
+      <style>{`:root{--bg:#050914;--surface:rgba(12,20,40,0.72);--surface2:rgba(10,18,36,0.64);--border:rgba(84,114,175,0.34);--accent:#5c82cf;--accent2:#3b5ea8;--green:#7ed8be;--text:#e7eefc;--muted:#95a8cf;}*{box-sizing:border-box;margin:0;padding:0;}body{background:radial-gradient(circle at 12% 10%,#1a2f63 0%,#122246 30%,#0b1631 58%,#050914 100%);color:var(--text);font-family:'Syne',sans-serif;}`}</style>
       <PinScreen onUnlock={() => setAuthed(true)} />
     </>
   );
@@ -598,76 +598,88 @@ export default function Home() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-          --bg: #0a0a0f; --surface: #111118; --surface2: #18181f; --border: #2a2a35;
-          --accent: #6c63ff; --accent2: #ff6584; --green: #00d68f;
-          --text: #e8e8f0; --muted: #6b6b80; --radius: 12px;
+          --bg: #050914; --surface: rgba(12,20,40,0.72); --surface2: rgba(10,18,36,0.64); --border: rgba(84,114,175,0.34);
+          --accent: #5c82cf; --accent2: #3b5ea8; --green: #7ed8be;
+          --text: #e7eefc; --muted: #95a8cf; --radius: 14px;
         }
-        body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
+        body {
+          background:
+            radial-gradient(circle at 12% 10%, #1a2f63 0%, #122246 30%, rgba(11,22,49,0.95) 64%, #050914 100%);
+          color: var(--text);
+          font-family: 'Syne', sans-serif;
+          min-height: 100vh;
+          overflow-x: hidden;
+        }
         .bg-grid {
           position: fixed; inset: 0; z-index: 0;
-          background-image: linear-gradient(rgba(108,99,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(108,99,255,0.04) 1px, transparent 1px);
-          background-size: 40px 40px; pointer-events: none;
+          background-image:
+            radial-gradient(circle at 20% 22%, rgba(255,194,78,0.35), transparent 14%),
+            radial-gradient(circle at 82% 28%, rgba(71,137,214,0.22), transparent 18%),
+            linear-gradient(rgba(120,156,221,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(120,156,221,0.07) 1px, transparent 1px);
+          background-size: auto, auto, 42px 42px, 42px 42px;
+          pointer-events: none;
         }
         .app { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 32px 20px 80px; }
-        .header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+        .header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; background: linear-gradient(145deg, rgba(29,48,91,0.58), rgba(12,20,40,0.5)); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 14px 40px rgba(2,6,20,0.45); }
         .logo-mark { width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: grid; place-items: center; font-size: 22px; flex-shrink: 0; box-shadow: 0 0 30px rgba(108,99,255,0.4); }
         .header-text h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.5px; }
         .header-text p { font-size: 0.82rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
         .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
         .header-stats { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
         .header-stats span { color: var(--accent); font-weight: 500; }
-        .btn-icon { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 38px; height: 38px; border-radius: 9px; cursor: pointer; font-size: 1.1rem; transition: all 0.15s; display: grid; place-items: center; }
-        .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-icon { background: linear-gradient(140deg, rgba(31,52,99,0.62), rgba(11,20,39,0.5)); border: 1px solid var(--border); color: var(--text); width: 38px; height: 38px; border-radius: 10px; cursor: pointer; font-size: 1.1rem; transition: all 0.15s; display: grid; place-items: center; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        .btn-icon:hover { border-color: rgba(230,245,255,0.8); color: #fff; transform: translateY(-1px); }
 
         /* Breadcrumb */
         .breadcrumb { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; font-size: 0.83rem; }
         .crumb { color: var(--muted); cursor: pointer; transition: color 0.15s; padding: 3px 6px; border-radius: 5px; }
-        .crumb:hover { color: var(--text); background: var(--surface2); }
+        .crumb:hover { color: var(--text); background: rgba(255,255,255,0.16); }
         .crumb.active { color: var(--text); font-weight: 700; cursor: default; }
         .crumb.active:hover { background: none; }
         .crumb-sep { color: var(--border); }
 
         /* Dropzone */
-        .dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface); margin-bottom: 20px; position: relative; overflow: hidden; }
-        .dropzone::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(255,101,132,0.05)); opacity: 0; transition: opacity 0.2s; }
+        .dropzone { border: 2px dashed rgba(109,143,205,0.45); border-radius: var(--radius); padding: 28px 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: linear-gradient(145deg, rgba(25,43,83,0.58), rgba(12,20,39,0.48)); margin-bottom: 20px; position: relative; overflow: hidden; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 36px rgba(2,6,20,0.4); }
+        .dropzone::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(62,96,165,0.28), rgba(19,31,63,0.15)); opacity: 0; transition: opacity 0.2s; }
         .dropzone:hover::before, .dropzone.drag-over::before { opacity: 1; }
-        .dropzone:hover, .dropzone.drag-over { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 40px rgba(108,99,255,0.15); }
+        .dropzone:hover, .dropzone.drag-over { border-color: rgba(157,193,255,0.72); box-shadow: 0 0 0 1px rgba(131,169,238,0.45), 0 0 46px rgba(48,79,145,0.32); }
         .dropzone-icon { font-size: 2rem; margin-bottom: 8px; }
         .dropzone h2 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
         .dropzone p { font-size: 0.8rem; color: var(--muted); }
-        .btn-upload { display: inline-block; margin-top: 12px; background: var(--accent); color: #fff; border: none; padding: 9px 22px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; box-shadow: 0 4px 20px rgba(108,99,255,0.35); }
-        .btn-upload:hover { background: #7d75ff; transform: translateY(-1px); }
+        .btn-upload { display: inline-block; margin-top: 12px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: 1px solid rgba(219,238,255,0.52); padding: 9px 22px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; box-shadow: 0 10px 24px rgba(66,108,212,0.32); }
+        .btn-upload:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
         /* Progress */
-        .progress-wrap { margin-bottom: 16px; background: var(--surface); border-radius: 8px; padding: 12px 16px; border: 1px solid var(--border); }
+        .progress-wrap { margin-bottom: 16px; background: linear-gradient(145deg, rgba(255,255,255,0.16), rgba(173,208,255,0.08)); border-radius: 10px; padding: 12px 16px; border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
         .progress-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; }
-        .progress-bar-bg { height: 5px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+        .progress-bar-bg { height: 5px; background: rgba(255,255,255,0.16); border-radius: 99px; overflow: hidden; }
         .progress-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.1s; }
 
         /* Toolbar */
         .toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
         .search-wrap { position: relative; flex: 1; min-width: 180px; }
-        .search-wrap input { width: 100%; padding: 9px 12px 9px 34px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; outline: none; transition: border-color 0.15s; }
-        .search-wrap input:focus { border-color: var(--accent); }
+        .search-wrap input { width: 100%; padding: 9px 12px 9px 34px; background: rgba(255,255,255,0.16); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; outline: none; transition: border-color 0.15s; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        .search-wrap input:focus { border-color: rgba(229,245,255,0.78); }
         .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.85rem; pointer-events: none; }
-        .btn-new-folder { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-        .btn-new-folder:hover { border-color: var(--accent); color: var(--accent); }
-        .btn-danger { background: rgba(255,101,132,0.12); color: var(--accent2); border: 1px solid rgba(255,101,132,0.3); padding: 9px 14px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-        .btn-danger:hover { background: rgba(255,101,132,0.22); }
+        .btn-new-folder { background: linear-gradient(140deg, rgba(31,52,99,0.62), rgba(11,20,39,0.5)); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        .btn-new-folder:hover { border-color: rgba(230,245,255,0.8); color: #fff; }
+        .btn-danger { background: linear-gradient(135deg, rgba(255,119,141,0.26), rgba(150,176,255,0.18)); color: #ffe5ec; border: 1px solid rgba(255,196,208,0.45); padding: 9px 14px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .btn-danger:hover { filter: brightness(1.05); }
 
         /* Table */
-        .file-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+        .file-table-wrap { background: linear-gradient(150deg, rgba(24,41,80,0.58), rgba(11,20,39,0.46)); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 16px 48px rgba(2,6,20,0.44); }
         .file-table { width: 100%; border-collapse: collapse; }
-        .file-table thead th { padding: 11px 14px; text-align: left; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+        .file-table thead th { padding: 11px 14px; text-align: left; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid rgba(220,240,255,0.22); cursor: pointer; user-select: none; white-space: nowrap; }
         .file-table thead th:hover { color: var(--text); }
         .file-table thead th.sorted { color: var(--accent); }
         .th-check { width: 38px; cursor: default !important; }
         .th-actions { width: 140px; cursor: default !important; }
         .file-row { transition: background 0.12s; animation: rowIn 0.2s ease both; }
         @keyframes rowIn { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
-        .file-row:hover { background: var(--surface2); }
-        .file-row.selected { background: rgba(108,99,255,0.08); }
-        .file-row td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .file-row:hover { background: rgba(255,255,255,0.11); }
+        .file-row.selected { background: rgba(149,189,255,0.18); }
+        .file-row td { padding: 11px 14px; border-bottom: 1px solid rgba(220,240,255,0.16); vertical-align: middle; }
         .file-row:last-child td { border-bottom: none; }
         .file-icon { font-size: 1.2rem; margin-right: 9px; }
         .file-name-cell { display: flex; align-items: center; }
@@ -678,12 +690,12 @@ export default function Home() {
         .file-size { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
         .file-date { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
         .actions-cell { display: flex; align-items: center; gap: 4px; }
-        .btn-dl { background: rgba(108,99,255,0.12); color: var(--accent); border: 1px solid rgba(108,99,255,0.25); padding: 5px 10px; border-radius: 6px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; white-space: nowrap; }
-        .btn-dl:hover { background: rgba(108,99,255,0.22); }
-        .btn-preview { background: rgba(0,214,143,0.1); color: var(--green); border: 1px solid rgba(0,214,143,0.25); padding: 5px 10px; border-radius: 6px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
-        .btn-preview:hover { background: rgba(0,214,143,0.2); }
+        .btn-dl { background: linear-gradient(135deg, rgba(128,174,255,0.28), rgba(106,139,237,0.2)); color: #f2f8ff; border: 1px solid rgba(215,236,255,0.44); padding: 5px 10px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; white-space: nowrap; }
+        .btn-dl:hover { filter: brightness(1.08); }
+        .btn-preview { background: linear-gradient(135deg, rgba(127,245,214,0.22), rgba(114,167,255,0.22)); color: #effff8; border: 1px solid rgba(206,248,235,0.44); padding: 5px 10px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+        .btn-preview:hover { filter: brightness(1.08); }
         .btn-action { background: none; color: var(--muted); border: none; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 0.9rem; transition: all 0.15s; display: grid; place-items: center; }
-        .btn-action:hover { background: var(--surface2); color: var(--text); }
+        .btn-action:hover { background: rgba(255,255,255,0.12); color: var(--text); }
         .btn-action.del:hover { background: rgba(255,101,132,0.15); color: var(--accent2); }
         .cb { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
         .empty { text-align: center; padding: 56px 20px; color: var(--muted); }
@@ -692,16 +704,16 @@ export default function Home() {
         .empty p { font-size: 0.82rem; }
         .toast { position: fixed; bottom: 26px; right: 26px; z-index: 999; padding: 11px 18px; border-radius: 10px; font-size: 0.86rem; font-weight: 600; animation: toastIn 0.2s ease; max-width: 300px; }
         @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-        .toast.ok { background: rgba(0,214,143,0.15); border: 1px solid rgba(0,214,143,0.4); color: var(--green); }
-        .toast.err { background: rgba(255,101,132,0.15); border: 1px solid rgba(255,101,132,0.4); color: var(--accent2); }
-        .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.65); display: grid; place-items: center; backdrop-filter: blur(6px); }
-        .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; max-width: 360px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: dlgIn 0.15s ease; }
+        .toast.ok { background: linear-gradient(140deg, rgba(127,245,214,0.22), rgba(119,169,255,0.2)); border: 1px solid rgba(209,250,239,0.42); color: #e9fff7; }
+        .toast.err { background: linear-gradient(140deg, rgba(255,129,151,0.24), rgba(127,173,255,0.19)); border: 1px solid rgba(255,207,217,0.45); color: #fff1f5; }
+        .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(2,6,18,0.64); display: grid; place-items: center; backdrop-filter: blur(8px); }
+        .dialog { background: linear-gradient(145deg, rgba(28,46,88,0.6), rgba(12,20,40,0.5)); border: 1px solid var(--border); border-radius: 16px; padding: 26px; max-width: 360px; width: 90%; box-shadow: 0 20px 60px rgba(2,6,20,0.5); animation: dlgIn 0.15s ease; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
         @keyframes dlgIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:none; } }
         .dialog h3 { font-size: 1.05rem; font-weight: 800; margin-bottom: 6px; }
         .dialog p { font-size: 0.83rem; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
         .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
-        .btn-cancel { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
-        .btn-confirm-del { background: var(--accent2); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
+        .btn-cancel { background: linear-gradient(140deg, rgba(31,52,99,0.62), rgba(11,20,39,0.5)); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 9px; font-family: 'Syne', sans-serif; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+        .btn-confirm-del { background: linear-gradient(140deg, #ff7f96, #7398ff); color: #fff; border: 1px solid rgba(255,216,224,0.52); padding: 8px 16px; border-radius: 9px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
         /* Mobile: collapse table rows into a compact list-style layout */
         @media (max-width: 600px) {
           .header-stats { display: none; }
@@ -749,7 +761,7 @@ export default function Home() {
           .file-table tbody tr:last-child { border-bottom: none; margin-bottom: 0; }
         }
         /* Mobile: ensure upload button is visible and provide a FAB fallback */
-        .fab-upload { display: none; position: fixed; right: 18px; bottom: 18px; z-index: 200; width: 56px; height: 56px; border-radius: 999px; background: var(--accent); color: #fff; border: none; box-shadow: 0 8px 30px rgba(108,99,255,0.35); cursor: pointer; align-items: center; justify-content: center; font-size: 20px; }
+        .fab-upload { display: none; position: fixed; right: 18px; bottom: 18px; z-index: 200; width: 56px; height: 56px; border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: 1px solid rgba(213,236,255,0.48); box-shadow: 0 12px 34px rgba(66,108,212,0.35); cursor: pointer; align-items: center; justify-content: center; font-size: 20px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
         @media (max-width: 600px) {
           .dropzone { padding: 18px; min-height: 120px; }
           .btn-upload { width: 100%; padding: 10px 14px; font-size: 0.9rem; }
@@ -933,7 +945,7 @@ export default function Home() {
           <div className="dialog" onClick={e => e.stopPropagation()} style={{ maxWidth:560 }}>
             <h3>Confirm Upload</h3>
             <p>You're about to upload <strong style={{ color:'var(--text)' }}>{pendingFiles.length}</strong> file(s) to <code style={{ fontFamily:'JetBrains Mono', color:'var(--accent)' }}>{(sharedDirDisplay || sharedDir || 'shared_files') + (subfolder ? `/${subfolder}` : '')}</code></p>
-            <div style={{ maxHeight: '40vh', overflow: 'auto', marginBottom: 16, padding: 8, background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ maxHeight: '40vh', overflow: 'auto', marginBottom: 16, padding: 8, background: 'linear-gradient(145deg, rgba(255,255,255,0.16), rgba(166,201,255,0.08))', borderRadius: 8, border: '1px solid var(--border)', backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)' }}>
               {pendingFiles.map((f, i) => (
                 <div key={`${f.name}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: '6px 8px', borderRadius:6 }}>
                   <div style={{ display:'flex', gap:12, alignItems:'center', minWidth: 0 }}>
