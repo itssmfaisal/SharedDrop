@@ -135,17 +135,160 @@ HOSTNAME=0.0.0.0
 PORT=$PORT
 EOF
 
-# ── Launch ────────────────────────────────────
-echo ""
-echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo -e "  🚀 ${BOLD}SharedDrop is starting!${RESET}"
-echo -e ""
-echo -e "  Local:    ${CYAN}http://localhost:${PORT}${RESET}"
-echo -e "  Network:  ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
-echo -e ""
-echo -e "  Share the ${BOLD}Network${RESET} URL with devices on your Wi-Fi."
-echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo ""
+# ── PID file location ─────────────────────────
+PID_FILE="$APP_DIR/.shareddrop.pid"
+LOG_FILE="$APP_DIR/.shareddrop.log"
 
-# Run on all interfaces so LAN devices can reach it
-HOST=0.0.0.0 PORT=$PORT npm start
+# ── Stop any existing background instance ─────
+stop_background() {
+  if [ -f "$PID_FILE" ]; then
+    OLD_PID=$(cat "$PID_FILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+      log "Stopping previous background instance (PID $OLD_PID)..."
+      kill "$OLD_PID" && rm -f "$PID_FILE"
+      success "Previous instance stopped"
+    else
+      rm -f "$PID_FILE"
+    fi
+  fi
+}
+
+# ── Launch in foreground ───────────────────────
+launch_foreground() {
+  echo ""
+  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo -e "  🚀 ${BOLD}SharedDrop is running!${RESET}"
+  echo -e ""
+  echo -e "  Local:    ${CYAN}http://localhost:${PORT}${RESET}"
+  echo -e "  Network:  ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
+  echo -e ""
+  echo -e "  Share the ${BOLD}Network${RESET} URL with devices on your Wi-Fi."
+  echo -e ""
+  echo -e "  Press ${BOLD}D${RESET} to detach (run in background)"
+  echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop"
+  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo ""
+
+  # Start app in background temporarily so we can watch for keypress
+  HOST=0.0.0.0 PORT=$PORT npm start &
+  APP_PID=$!
+
+  # Watch for 'd' keypress — non-blocking read loop
+  detached=false
+  if [ -t 0 ]; then
+    # Save terminal settings and switch to raw mode
+    old_tty=$(stty -g 2>/dev/null)
+    stty raw -echo 2>/dev/null
+
+    while kill -0 "$APP_PID" 2>/dev/null; do
+      # Read one char with 0.2s timeout
+      key=$(dd bs=1 count=1 2>/dev/null | cat)
+      # Ctrl+C = \x03
+      if printf '%s' "$key" | grep -qP '\x03' 2>/dev/null || [ "$key" = $'\x03' ]; then
+        stty "$old_tty" 2>/dev/null
+        echo ""
+        log "Stopping SharedDrop..."
+        kill "$APP_PID" 2>/dev/null
+        wait "$APP_PID" 2>/dev/null
+        echo ""
+        success "SharedDrop stopped. Goodbye!"
+        exit 0
+      fi
+      if [ "${key,,}" = "d" ]; then
+        stty "$old_tty" 2>/dev/null
+        detached=true
+        break
+      fi
+    done
+
+    stty "$old_tty" 2>/dev/null
+  else
+    # Non-interactive shell (piped) — just wait
+    wait "$APP_PID"
+    exit 0
+  fi
+
+  if [ "$detached" = true ]; then
+    detach_to_background "$APP_PID"
+  fi
+}
+
+# ── Detach running process to background ──────
+detach_to_background() {
+  local pid="${1:-}"
+
+  if [ -z "$pid" ]; then
+    # Fresh background launch (called directly)
+    stop_background
+    HOST=0.0.0.0 PORT=$PORT nohup npm start > "$LOG_FILE" 2>&1 &
+    pid=$!
+  fi
+
+  echo "$pid" > "$PID_FILE"
+  disown "$pid" 2>/dev/null || true
+
+  echo ""
+  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo -e "  📦 ${BOLD}SharedDrop detached to background!${RESET}"
+  echo -e ""
+  echo -e "  Local:    ${CYAN}http://localhost:${PORT}${RESET}"
+  echo -e "  Network:  ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
+  echo -e ""
+  echo -e "  PID:      ${BOLD}$pid${RESET}"
+  echo -e "  Logs:     ${BOLD}$LOG_FILE${RESET}"
+  echo -e ""
+  echo -e "  To view logs:  ${YELLOW}tail -f $LOG_FILE${RESET}"
+  echo -e "  To stop:       ${YELLOW}kill \$(cat $PID_FILE)${RESET}"
+  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo ""
+}
+
+# ── Check if already running in background ────
+if [ -f "$PID_FILE" ]; then
+  RUNNING_PID=$(cat "$PID_FILE")
+  if kill -0 "$RUNNING_PID" 2>/dev/null; then
+    echo ""
+    echo -e "${YELLOW}[!]${RESET} SharedDrop is already running in the background (PID ${BOLD}$RUNNING_PID${RESET})"
+    echo -e "    Local:   ${CYAN}http://localhost:${PORT}${RESET}"
+    echo -e "    Network: ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
+    echo ""
+    echo -e "  What would you like to do?"
+    echo -e "  [${BOLD}R${RESET}] Restart   [${BOLD}S${RESET}] Stop   [${BOLD}Q${RESET}] Quit"
+    echo ""
+
+    if [ -t 0 ]; then
+      old_tty=$(stty -g 2>/dev/null)
+      stty raw -echo 2>/dev/null
+      key=$(dd bs=1 count=1 2>/dev/null | cat)
+      stty "$old_tty" 2>/dev/null
+      echo ""
+
+      case "${key,,}" in
+        r)
+          log "Restarting..."
+          kill "$RUNNING_PID" 2>/dev/null
+          rm -f "$PID_FILE"
+          sleep 1
+          ;;
+        s)
+          kill "$RUNNING_PID" 2>/dev/null
+          rm -f "$PID_FILE"
+          success "SharedDrop stopped."
+          exit 0
+          ;;
+        *)
+          log "Exiting without changes."
+          exit 0
+          ;;
+      esac
+    else
+      exit 0
+    fi
+  else
+    rm -f "$PID_FILE"
+  fi
+fi
+
+# ── Main: Launch ──────────────────────────────
+stop_background
+launch_foreground
