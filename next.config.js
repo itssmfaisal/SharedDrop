@@ -4,6 +4,7 @@
  * - assetPrefix: ensures static assets are requested under the same prefix
  */
 module.exports = {
+  output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
   basePath: '',

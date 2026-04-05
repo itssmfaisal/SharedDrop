@@ -181,6 +181,35 @@ fi
 
 stop_background
 
+# ── Free the port if something else is using it ──
+free_port() {
+  local port="$1"
+  local pid_on_port=""
+
+  if command -v lsof &>/dev/null; then
+    pid_on_port=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+  elif command -v ss &>/dev/null; then
+    pid_on_port=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' || true)
+  elif command -v fuser &>/dev/null; then
+    pid_on_port=$(fuser "${port}/tcp" 2>/dev/null || true)
+  fi
+
+  if [ -n "$pid_on_port" ]; then
+    warn "Port $port is in use by PID $pid_on_port — stopping it..."
+    kill "$pid_on_port" 2>/dev/null || true
+    local i=0
+    while [ $i -lt 15 ]; do
+      sleep 0.2
+      still_used=$(lsof -ti tcp:"$port" 2>/dev/null || ss -tlnp 2>/dev/null | grep -c ":$port " || echo "")
+      [ -z "$still_used" ] || [ "$still_used" = "0" ] && break
+      i=$((i+1))
+    done
+    success "Port $port is now free"
+  fi
+}
+
+free_port "$PORT"
+
 # ── Print running banner ───────────────────────
 echo ""
 echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
