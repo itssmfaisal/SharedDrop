@@ -135,7 +135,7 @@ HOSTNAME=0.0.0.0
 PORT=$PORT
 EOF
 
-# ── PID file location ─────────────────────────
+# ── PID / log file locations ──────────────────
 PID_FILE="$APP_DIR/.shareddrop.pid"
 LOG_FILE="$APP_DIR/.shareddrop.log"
 
@@ -145,7 +145,7 @@ stop_background() {
     OLD_PID=$(cat "$PID_FILE")
     if kill -0 "$OLD_PID" 2>/dev/null; then
       log "Stopping previous background instance (PID $OLD_PID)..."
-      kill "$OLD_PID" && rm -f "$PID_FILE"
+      kill "$OLD_PID" 2>/dev/null && rm -f "$PID_FILE"
       success "Previous instance stopped"
     else
       rm -f "$PID_FILE"
@@ -153,87 +153,11 @@ stop_background() {
   fi
 }
 
-# ── Launch in foreground ───────────────────────
-launch_foreground() {
-  echo ""
-  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-  echo -e "  🚀 ${BOLD}SharedDrop is running!${RESET}"
-  echo -e ""
-  echo -e "  Local:    ${CYAN}http://localhost:${PORT}${RESET}"
-  echo -e "  Network:  ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
-  echo -e ""
-  echo -e "  Share the ${BOLD}Network${RESET} URL with devices on your Wi-Fi."
-  echo -e ""
-  echo -e "  Press ${BOLD}D${RESET} to detach (run in background)"
-  echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop"
-  echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-  echo ""
-
-  # ── Key fix: redirect app stdin from /dev/null so it never
-  #    competes for keystrokes. Output still flows to terminal.
-  HOST=0.0.0.0 PORT=$PORT npm start </dev/null &
-  APP_PID=$!
-
-  # Non-interactive shell (e.g. curl | bash) — just wait
-  if [ ! -t 1 ]; then
-    wait "$APP_PID"
-    exit 0
-  fi
-
-  # ── Read keypresses from /dev/tty (the real terminal),
-  #    not stdin, so app output doesn't interfere.
-  detached=false
-  old_tty=$(stty -g </dev/tty 2>/dev/null)
-
-  # Trap Ctrl+C so we can clean up gracefully
-  trap '
-    stty "$old_tty" </dev/tty 2>/dev/null
-    echo ""
-    log "Stopping SharedDrop..."
-    kill "$APP_PID" 2>/dev/null
-    wait "$APP_PID" 2>/dev/null
-    echo ""
-    success "SharedDrop stopped. Goodbye!"
-    exit 0
-  ' INT TERM
-
-  stty raw -echo </dev/tty 2>/dev/null
-
-  while kill -0 "$APP_PID" 2>/dev/null; do
-    # Read exactly one char from the real terminal (0.3s timeout)
-    key=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
-    case "$key" in
-      d|D)
-        stty "$old_tty" </dev/tty 2>/dev/null
-        trap - INT TERM
-        detached=true
-        break
-        ;;
-    esac
-  done
-
-  stty "$old_tty" </dev/tty 2>/dev/null
-  trap - INT TERM
-
-  if [ "$detached" = true ]; then
-    detach_to_background "$APP_PID"
-  fi
-}
-
-# ── Detach running process to background ──────
-detach_to_background() {
-  local pid="${1:-}"
-
-  if [ -z "$pid" ]; then
-    # Fresh background launch (called directly)
-    stop_background
-    HOST=0.0.0.0 PORT=$PORT nohup npm start > "$LOG_FILE" 2>&1 &
-    pid=$!
-  fi
-
+# ── Detach: show summary and save PID ─────────
+show_detached_message() {
+  local pid="$1"
   echo "$pid" > "$PID_FILE"
   disown "$pid" 2>/dev/null || true
-
   echo ""
   echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
   echo -e "  📦 ${BOLD}SharedDrop detached to background!${RESET}"
@@ -250,7 +174,7 @@ detach_to_background() {
   echo ""
 }
 
-# ── Check if already running in background ────
+# ── Already running? Offer menu ───────────────
 if [ -f "$PID_FILE" ]; then
   RUNNING_PID=$(cat "$PID_FILE")
   if kill -0 "$RUNNING_PID" 2>/dev/null; then
@@ -259,43 +183,145 @@ if [ -f "$PID_FILE" ]; then
     echo -e "    Local:   ${CYAN}http://localhost:${PORT}${RESET}"
     echo -e "    Network: ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
     echo ""
-    echo -e "  What would you like to do?"
     echo -e "  [${BOLD}R${RESET}] Restart   [${BOLD}S${RESET}] Stop   [${BOLD}Q${RESET}] Quit"
     echo ""
 
-    if [ -t 1 ]; then
-      old_tty=$(stty -g </dev/tty 2>/dev/null)
-      stty raw -echo </dev/tty 2>/dev/null
-      key=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
-      stty "$old_tty" </dev/tty 2>/dev/null
-      echo ""
+    old_term=$(stty -g </dev/tty 2>/dev/null)
+    stty raw -echo </dev/tty 2>/dev/null
+    key=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
+    stty "$old_term" </dev/tty 2>/dev/null
+    echo ""
 
-      case "${key,,}" in
-        r)
-          log "Restarting..."
-          kill "$RUNNING_PID" 2>/dev/null
-          rm -f "$PID_FILE"
-          sleep 1
-          ;;
-        s)
-          kill "$RUNNING_PID" 2>/dev/null
-          rm -f "$PID_FILE"
-          success "SharedDrop stopped."
-          exit 0
-          ;;
-        *)
-          log "Exiting without changes."
-          exit 0
-          ;;
-      esac
-    else
-      exit 0
-    fi
+    case "${key,,}" in
+      r)
+        log "Restarting..."
+        kill "$RUNNING_PID" 2>/dev/null; rm -f "$PID_FILE"; sleep 1
+        ;;
+      s)
+        kill "$RUNNING_PID" 2>/dev/null; rm -f "$PID_FILE"
+        success "SharedDrop stopped."; exit 0
+        ;;
+      *)
+        log "Exiting without changes."; exit 0
+        ;;
+    esac
   else
     rm -f "$PID_FILE"
   fi
 fi
 
-# ── Main: Launch ──────────────────────────────
 stop_background
-launch_foreground
+
+# ── Print running banner ───────────────────────
+echo ""
+echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "  🚀 ${BOLD}SharedDrop is running!${RESET}"
+echo -e ""
+echo -e "  Local:    ${CYAN}http://localhost:${PORT}${RESET}"
+echo -e "  Network:  ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
+echo -e ""
+echo -e "  Share the ${BOLD}Network${RESET} URL with devices on your Wi-Fi."
+echo -e ""
+echo -e "  Press ${BOLD}D${RESET} to detach (run in background)"
+echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop"
+echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo ""
+
+# ── Start the app.
+#    stdin </dev/null — Node.js gets no terminal input at all.
+#    stdout+stderr go to terminal so logs are visible.
+HOST=0.0.0.0 PORT=$PORT npm start </dev/null &
+APP_PID=$!
+
+# Non-interactive (piped) shell — just wait forever
+if [ ! -t 1 ]; then
+  wait "$APP_PID"
+  exit 0
+fi
+
+# ── Signal file: reader subprocess writes here when D is pressed ──
+KEY_SIGNAL=$(mktemp /tmp/shareddrop_key.XXXXXX)
+
+# ── Spawn dedicated key-reader subprocess.
+#    It has exclusive ownership of /dev/tty in raw mode.
+#    The app process has no stdin so there is ZERO competition.
+(
+  old_term=$(stty -g </dev/tty 2>/dev/null)
+  stty raw -echo </dev/tty 2>/dev/null
+  while true; do
+    # blocking read — waits until exactly one byte arrives on /dev/tty
+    ch=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
+    case "$ch" in
+      d|D)
+        printf 'd' > "$KEY_SIGNAL"
+        break
+        ;;
+      # q/Q or Ctrl+C from tty → write 'q' so parent can exit cleanly
+      q|Q|$'\x03')
+        printf 'q' > "$KEY_SIGNAL"
+        break
+        ;;
+    esac
+  done
+  stty "$old_term" </dev/tty 2>/dev/null
+) &
+READER_PID=$!
+
+# ── Ctrl+C on the main process (SIGINT sent to whole group) ───────
+trap '
+  kill "$READER_PID" 2>/dev/null
+  wait "$READER_PID" 2>/dev/null
+  rm -f "$KEY_SIGNAL"
+  echo ""
+  log "Stopping SharedDrop..."
+  kill "$APP_PID" 2>/dev/null
+  wait "$APP_PID" 2>/dev/null
+  echo ""
+  success "SharedDrop stopped. Goodbye!"
+  exit 0
+' INT TERM
+
+# ── Poll loop: checks signal file every 0.2 s.
+#    The main shell is NOT blocked — it just sleeps briefly.
+#    The reader subprocess handles all the blocking tty I/O.
+action=""
+while kill -0 "$APP_PID" 2>/dev/null; do
+  if [ -s "$KEY_SIGNAL" ]; then
+    action=$(cat "$KEY_SIGNAL")
+    break
+  fi
+  sleep 0.2
+done
+
+# Disarm trap and clean up reader
+trap - INT TERM
+kill "$READER_PID" 2>/dev/null
+wait "$READER_PID" 2>/dev/null
+rm -f "$KEY_SIGNAL"
+
+case "$action" in
+  d)
+    # Kill the foreground app and relaunch with nohup so it
+    # survives terminal close and writes logs to file
+    log "Detaching..."
+    kill "$APP_PID" 2>/dev/null
+    wait "$APP_PID" 2>/dev/null
+    sleep 0.3
+    nohup bash -c "HOST=0.0.0.0 PORT=$PORT npm --prefix '$APP_DIR' start" \
+      > "$LOG_FILE" 2>&1 &
+    BG_PID=$!
+    show_detached_message "$BG_PID"
+    ;;
+  q)
+    log "Stopping SharedDrop..."
+    kill "$APP_PID" 2>/dev/null
+    wait "$APP_PID" 2>/dev/null
+    success "SharedDrop stopped. Goodbye!"
+    exit 0
+    ;;
+  *)
+    # App exited on its own
+    warn "SharedDrop exited unexpectedly."
+    exit 1
+    ;;
+esac
