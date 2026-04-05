@@ -326,11 +326,41 @@ function NewFolderModal({ subfolder, onClose, onDone, sharedDir, sharedDirDispla
 }
 
 // ── New File Modal ───────────────────────────────────────────────────────────
-function NewFileModal({ subfolder, onClose, onDone }: { subfolder: string; onClose: () => void; onDone: () => void }) {
-  const [name, setName] = useState('');
-  const [content, setContent] = useState('');
+function NewFileModal({
+  subfolder,
+  onClose,
+  onDone,
+  initialName = '',
+  initialContent = '',
+  title = 'New File',
+  description,
+  confirmLabel = 'Create File',
+  showLineNumbers = false,
+  modalSize = 'default',
+}: {
+  subfolder: string;
+  onClose: () => void;
+  onDone: () => void;
+  initialName?: string;
+  initialContent?: string;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  showLineNumbers?: boolean;
+  modalSize?: 'default' | 'large';
+}) {
+  const [name, setName] = useState(initialName);
+  const [content, setContent] = useState(initialContent);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement | null>(null);
+  const lineRef = useRef<HTMLDivElement | null>(null);
+  const isLargeModal = modalSize === 'large';
+
+  useEffect(() => {
+    setName(initialName);
+    setContent(initialContent);
+  }, [initialName, initialContent]);
 
   const submit = async () => {
     if (!name.trim()) return;
@@ -346,22 +376,54 @@ function NewFileModal({ subfolder, onClose, onDone }: { subfolder: string; onClo
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="dialog" onClick={e => e.stopPropagation()}>
-        <h3>New File</h3>
-        <input
-          value={name} onChange={e => setName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-          placeholder="File name (e.g. notes.txt)…"
-          style={{ width:'100%', padding:'10px 14px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'Syne, sans-serif', fontSize:'0.9rem', outline:'none', marginBottom: 12 }}
-          autoFocus
-        />
-        <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="Initial content (optional)" style={{ width:'100%', minHeight:120, padding:'10px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:'0.85rem', outline:'none', marginBottom: err ? 8 : 16 }} />
+      <div
+        className="dialog"
+        onClick={e => e.stopPropagation()}
+        style={{
+          ...(isLargeModal ? { maxWidth: 860, width: '92vw' } : {}),
+          maxHeight: '88vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <h3>{title}</h3>
+        <div style={{ paddingRight: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {description && <p style={{ marginBottom:12 }}>{description}</p>}
+          <input
+            value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            placeholder="File name (e.g. notes.txt)…"
+            style={{ width:'100%', padding:'10px 14px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'Syne, sans-serif', fontSize:'0.9rem', outline:'none', marginBottom: 12 }}
+            autoFocus
+          />
+          {showLineNumbers ? (
+            <div style={{ display:'grid', gridTemplateColumns:'56px 1fr', gap: 0, border:'1px solid var(--border)', borderRadius:8, overflow:'hidden', marginBottom: err ? 8 : 16, background:'var(--surface2)', flex: 1, minHeight: 0 }}>
+              <div ref={lineRef} style={{ userSelect:'none', textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:'0.8rem', lineHeight:'1.45', padding:'10px 8px', borderRight:'1px solid rgba(255,255,255,0.12)', overflow:'hidden', whiteSpace:'pre' }}>
+                {Array.from({ length: Math.max(1, content.split(/\r?\n/).length) }, (_, i) => i + 1).join('\n')}
+              </div>
+              <textarea
+                ref={contentRef}
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                onScroll={e => {
+                  if (lineRef.current) lineRef.current.scrollTop = (e.currentTarget as HTMLTextAreaElement).scrollTop;
+                }}
+                placeholder="Initial content (optional)"
+                spellCheck={false}
+                style={{ width:'100%', height: '100%', minHeight: isLargeModal ? 260 : 180, padding:'10px 12px', border:'none', borderRadius:0, color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:'0.85rem', lineHeight:'1.45', outline:'none', resize:'none', background:'transparent', overflowY: 'auto' }}
+              />
+            </div>
+          ) : (
+            <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="Initial content (optional)" style={{ width:'100%', minHeight: isLargeModal ? 220 : 120, maxHeight: '48vh', padding:'10px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:'0.85rem', outline:'none', marginBottom: err ? 8 : 16, resize: 'vertical' }} />
+          )}
+        </div>
         {err && <p style={{ color:'var(--accent2)', fontSize:'0.82rem', marginBottom:16 }}>{err}</p>}
-        <div className="dialog-actions">
+        <div className="dialog-actions" style={{ marginTop: 8, flexShrink: 0 }}>
           <button className="btn-cancel" onClick={onClose}>Cancel</button>
           <button onClick={submit} disabled={busy || !name.trim()}
             style={{ background:'var(--accent)', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, fontFamily:'Syne, sans-serif', fontWeight:700, cursor:'pointer', opacity: busy?0.6:1 }}>
-            {busy ? 'Creating…' : 'Create File'}
+            {busy ? 'Creating…' : confirmLabel}
           </button>
         </div>
       </div>
@@ -389,6 +451,7 @@ export default function Home() {
   const [renameFile, setRenameFile] = useState<FileInfo | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [showNewFile, setShowNewFile] = useState(false);
+  const [pastedTextDraft, setPastedTextDraft] = useState<{ name: string; content: string } | null>(null);
   const [showQR, setShowQR] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [sharedDir, setSharedDir] = useState<string>('');
@@ -397,6 +460,20 @@ export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+
+  const suggestNameFromText = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return `note-${Date.now()}.txt`;
+    const firstLine = trimmed.split(/\r?\n/)[0] || 'note';
+    const safe = firstLine
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase()
+      .slice(0, 48);
+    return `${safe || 'note'}.txt`;
+  }, []);
 
   useEffect(() => {
     // create object URLs for image previews and revoke previous ones
@@ -434,12 +511,20 @@ export default function Home() {
     }).catch(() => {});
   }, []);
 
-  // Paste-to-upload: listen for images pasted from clipboard (Ctrl/Cmd+V)
+  // Paste handler: images open upload confirmation, text opens create-file modal.
   useEffect(() => {
+    const isEditableElement = (el: HTMLElement | null) => {
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+      return !!el.closest('[contenteditable="true"]');
+    };
+
     const onPaste = (e: Event) => {
       const ev = e as ClipboardEvent & { clipboardData?: DataTransfer };
       try {
         const tgt = (ev.target as HTMLElement | null);
+        if (isEditableElement(tgt)) return;
         if (tgt && tgt.closest && tgt.closest('[data-chat-input]')) return; // ignore paste when chat input targeted
         const clipboard = (ev.clipboardData || (window as any).clipboardData) as DataTransfer | undefined;
         if (!clipboard) return;
@@ -459,6 +544,16 @@ export default function Home() {
           // Show confirmation modal (reuse choose-file preview flow)
           setPendingFiles(files);
           ev.preventDefault?.();
+          return;
+        }
+
+        const pastedText = (clipboard.getData && clipboard.getData('text/plain')) || '';
+        if (pastedText && pastedText.trim()) {
+          setPastedTextDraft({
+            name: suggestNameFromText(pastedText),
+            content: pastedText,
+          });
+          ev.preventDefault?.();
         }
       } catch (err) {
         console.error('paste upload error', err);
@@ -470,6 +565,7 @@ export default function Home() {
       const ev = e as KeyboardEvent;
       if (!((ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V'))) return;
       const active = document.activeElement as HTMLElement | null;
+      if (isEditableElement(active)) return;
       if (active && active.closest && active.closest('[data-chat-input]')) return; // ignore Ctrl/Cmd+V when chat input focused
       // Try the async Clipboard API first (may provide images)
       try {
@@ -504,7 +600,7 @@ export default function Home() {
       window.removeEventListener('paste', onPaste as EventListener);
       window.removeEventListener('keydown', onKeyDown as EventListener);
     };
-  }, [subfolder]);
+  }, [subfolder, suggestNameFromText]);
 
   const showToast = (msg: string, type: 'ok'|'err' = 'ok') => {
     setToast({ msg, type });
@@ -938,6 +1034,24 @@ export default function Home() {
       {showNewFile && (
         <NewFileModal subfolder={subfolder} onClose={() => setShowNewFile(false)}
           onDone={async () => { setShowNewFile(false); showToast('File created'); await fetchFiles(); }}
+        />
+      )}
+      {pastedTextDraft && (
+        <NewFileModal
+          subfolder={subfolder}
+          initialName={pastedTextDraft.name}
+          initialContent={pastedTextDraft.content}
+          title="Create File From Pasted Text"
+          description="Review the pasted text and edit the file name before creating it."
+          confirmLabel="Create From Paste"
+          showLineNumbers
+          modalSize="large"
+          onClose={() => setPastedTextDraft(null)}
+          onDone={async () => {
+            setPastedTextDraft(null);
+            showToast('File created from pasted text');
+            await fetchFiles();
+          }}
         />
       )}
       {pendingFiles && pendingFiles.length > 0 && (
