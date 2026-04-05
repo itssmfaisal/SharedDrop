@@ -169,44 +169,51 @@ launch_foreground() {
   echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
   echo ""
 
-  # Start app in background temporarily so we can watch for keypress
-  HOST=0.0.0.0 PORT=$PORT npm start &
+  # ── Key fix: redirect app stdin from /dev/null so it never
+  #    competes for keystrokes. Output still flows to terminal.
+  HOST=0.0.0.0 PORT=$PORT npm start </dev/null &
   APP_PID=$!
 
-  # Watch for 'd' keypress — non-blocking read loop
-  detached=false
-  if [ -t 0 ]; then
-    # Save terminal settings and switch to raw mode
-    old_tty=$(stty -g 2>/dev/null)
-    stty raw -echo 2>/dev/null
-
-    while kill -0 "$APP_PID" 2>/dev/null; do
-      # Read one char with 0.2s timeout
-      key=$(dd bs=1 count=1 2>/dev/null | cat)
-      # Ctrl+C = \x03
-      if printf '%s' "$key" | grep -qP '\x03' 2>/dev/null || [ "$key" = $'\x03' ]; then
-        stty "$old_tty" 2>/dev/null
-        echo ""
-        log "Stopping SharedDrop..."
-        kill "$APP_PID" 2>/dev/null
-        wait "$APP_PID" 2>/dev/null
-        echo ""
-        success "SharedDrop stopped. Goodbye!"
-        exit 0
-      fi
-      if [ "${key,,}" = "d" ]; then
-        stty "$old_tty" 2>/dev/null
-        detached=true
-        break
-      fi
-    done
-
-    stty "$old_tty" 2>/dev/null
-  else
-    # Non-interactive shell (piped) — just wait
+  # Non-interactive shell (e.g. curl | bash) — just wait
+  if [ ! -t 1 ]; then
     wait "$APP_PID"
     exit 0
   fi
+
+  # ── Read keypresses from /dev/tty (the real terminal),
+  #    not stdin, so app output doesn't interfere.
+  detached=false
+  old_tty=$(stty -g </dev/tty 2>/dev/null)
+
+  # Trap Ctrl+C so we can clean up gracefully
+  trap '
+    stty "$old_tty" </dev/tty 2>/dev/null
+    echo ""
+    log "Stopping SharedDrop..."
+    kill "$APP_PID" 2>/dev/null
+    wait "$APP_PID" 2>/dev/null
+    echo ""
+    success "SharedDrop stopped. Goodbye!"
+    exit 0
+  ' INT TERM
+
+  stty raw -echo </dev/tty 2>/dev/null
+
+  while kill -0 "$APP_PID" 2>/dev/null; do
+    # Read exactly one char from the real terminal (0.3s timeout)
+    key=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
+    case "$key" in
+      d|D)
+        stty "$old_tty" </dev/tty 2>/dev/null
+        trap - INT TERM
+        detached=true
+        break
+        ;;
+    esac
+  done
+
+  stty "$old_tty" </dev/tty 2>/dev/null
+  trap - INT TERM
 
   if [ "$detached" = true ]; then
     detach_to_background "$APP_PID"
@@ -256,11 +263,11 @@ if [ -f "$PID_FILE" ]; then
     echo -e "  [${BOLD}R${RESET}] Restart   [${BOLD}S${RESET}] Stop   [${BOLD}Q${RESET}] Quit"
     echo ""
 
-    if [ -t 0 ]; then
-      old_tty=$(stty -g 2>/dev/null)
-      stty raw -echo 2>/dev/null
-      key=$(dd bs=1 count=1 2>/dev/null | cat)
-      stty "$old_tty" 2>/dev/null
+    if [ -t 1 ]; then
+      old_tty=$(stty -g </dev/tty 2>/dev/null)
+      stty raw -echo </dev/tty 2>/dev/null
+      key=$(dd bs=1 count=1 </dev/tty 2>/dev/null)
+      stty "$old_tty" </dev/tty 2>/dev/null
       echo ""
 
       case "${key,,}" in
