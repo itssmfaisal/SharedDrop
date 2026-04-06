@@ -654,7 +654,23 @@ export default function Home() {
 
   const navigateTo = (folder: string) => { setSubfolder(folder); setSearch(''); setSelected(new Set()); };
 
+  const getDownloadUrl = (name: string) => `/api/download?name=${encodeURIComponent(name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
+
   const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext) || f.ext === 'txt' || f.ext === 'pdf' || CODE_EXTS.has(f.ext);
+
+  const openRowItem = (f: FileInfo) => {
+    if (f.isDir) {
+      navigateTo(subfolder ? `${subfolder}/${f.name}` : f.name);
+      return;
+    }
+
+    if (canPreview(f)) {
+      setPreviewFile(f);
+      return;
+    }
+
+    window.open(getDownloadUrl(f.name), '_blank', 'noopener,noreferrer');
+  };
 
   const sortedFiles = [...files]
     .filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
@@ -966,6 +982,7 @@ export default function Home() {
                   <th className="th-check">
                     <input type="checkbox" className="cb"
                       checked={selected.size === sortedFiles.length && sortedFiles.length > 0}
+                      onClick={e => e.stopPropagation()}
                       onChange={e => setSelected(e.target.checked ? new Set(sortedFiles.map(f => f.name)) : new Set())}
                     />
                   </th>
@@ -977,8 +994,8 @@ export default function Home() {
               </thead>
               <tbody>
                 {sortedFiles.map((f, i) => (
-                  <tr key={f.name} className={`file-row${selected.has(f.name)?' selected':''}`} style={{ animationDelay:`${i*25}ms` }}>
-                    <td><input type="checkbox" className="cb" checked={selected.has(f.name)} onChange={() => toggleSelect(f.name)} /></td>
+                  <tr key={f.name} className={`file-row${selected.has(f.name)?' selected':''}`} style={{ animationDelay:`${i*25}ms`, cursor: 'pointer' }} onClick={() => openRowItem(f)}>
+                    <td><input type="checkbox" className="cb" checked={selected.has(f.name)} onClick={e => e.stopPropagation()} onChange={() => toggleSelect(f.name)} /></td>
                     <td>
                       <div className="file-name-cell">
                         <span className="file-icon">{fileIcon(f.ext, f.isDir)}</span>
@@ -986,7 +1003,6 @@ export default function Home() {
                           <div
                             className={`file-name${f.isDir?' is-dir':''}`}
                             title={f.name}
-                            onClick={() => f.isDir && navigateTo(subfolder ? `${subfolder}/${f.name}` : f.name)}
                           >{f.name}</div>
                           {f.ext && <div className="file-ext">.{f.ext.toUpperCase()}</div>}
                         </div>
@@ -995,15 +1011,12 @@ export default function Home() {
                     <td><span className="file-size">{f.isDir ? '—' : formatBytes(f.size)}</span></td>
                     <td><span className="file-date">{formatDate(f.modified)}</span></td>
                     <td>
-                      <div className="actions-cell">
-                        {canPreview(f) && (
-                          <button className="btn-preview" onClick={() => setPreviewFile(f)}>👁 Preview</button>
-                        )}
+                      <div className="actions-cell" onClick={e => e.stopPropagation()}>
                         {!f.isDir && (
-                          <a className="btn-dl" href={`/api/download?name=${encodeURIComponent(f.name)}${subfolder?`&subfolder=${encodeURIComponent(subfolder)}`:''}`} download>↓</a>
+                          <a className="btn-dl" href={getDownloadUrl(f.name)} download onClick={e => e.stopPropagation()}>↓</a>
                         )}
-                        <button className="btn-action" title="Rename" onClick={() => setRenameFile(f)}>✏️</button>
-                        <button className="btn-action del" title="Delete" onClick={() => setConfirmDelete(f.name)}>✕</button>
+                        <button className="btn-action" title="Rename" onClick={e => { e.stopPropagation(); setRenameFile(f); }}>✏️</button>
+                        <button className="btn-action del" title="Delete" onClick={e => { e.stopPropagation(); setConfirmDelete(f.name); }}>✕</button>
                       </div>
                     </td>
                   </tr>
