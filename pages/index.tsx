@@ -910,6 +910,7 @@ export default function Home() {
 
   // Breadcrumb parts
   const crumbs = subfolder ? subfolder.split('/').filter(Boolean) : [];
+  const parentFolder = subfolder ? crumbs.slice(0, -1).join('/') : '';
 
   if (pinRequired === null) return null; // loading
   if (pinRequired && !authed) return (
@@ -997,6 +998,8 @@ export default function Home() {
         .search-wrap input { width: 100%; padding: 9px 12px 9px 34px; background: rgba(255,255,255,0.16); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; outline: none; transition: border-color 0.15s; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
         .search-wrap input:focus { border-color: rgba(229,245,255,0.78); }
         .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.85rem; pointer-events: none; }
+        .btn-nav-back { background: linear-gradient(140deg, rgba(48,77,143,0.45), rgba(20,33,66,0.38)); border: 1px solid rgba(161,196,255,0.34); color: #dce8ff; padding: 9px 12px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .btn-nav-back:hover { border-color: rgba(216,234,255,0.78); color: #fff; transform: translateY(-1px); }
         .btn-new-folder { background: linear-gradient(140deg, rgba(31,52,99,0.62), rgba(11,20,39,0.5)); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
         .btn-new-folder:hover { border-color: rgba(230,245,255,0.8); color: #fff; }
         .btn-danger { background: linear-gradient(135deg, rgba(255,119,141,0.26), rgba(150,176,255,0.18)); color: #ffe5ec; border: 1px solid rgba(255,196,208,0.45); padding: 9px 14px; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
@@ -1183,6 +1186,9 @@ export default function Home() {
 
         {/* Toolbar */}
         <div className="toolbar">
+          {subfolder !== '' && (
+            <button className="btn-nav-back" onClick={() => navigateTo(parentFolder)} title="Go back to parent folder">← Back</button>
+          )}
           <div className="search-wrap">
             <span className="search-icon">🔍</span>
             <input type="text" placeholder="Search files…" value={search} onChange={e => setSearch(e.target.value)} />
