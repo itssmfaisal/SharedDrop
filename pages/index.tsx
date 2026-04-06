@@ -267,6 +267,34 @@ function PreviewModal({ file, subfolder, onClose, onSaved }: { file: FileInfo; s
   };
 
   const onEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const pairMap: Record<string, string> = {
+      '(': ')',
+      '{': '}',
+      '[': ']',
+    };
+
+    if (pairMap[e.key]) {
+      e.preventDefault();
+      const el = e.currentTarget;
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const current = textContent || '';
+      const selected = current.slice(start, end);
+      const open = e.key;
+      const close = pairMap[e.key];
+      const next = current.slice(0, start) + open + selected + close + current.slice(end);
+      setTextContent(next);
+      requestAnimationFrame(() => {
+        if (selected.length > 0) {
+          el.selectionStart = start + 1;
+          el.selectionEnd = start + 1 + selected.length;
+        } else {
+          el.selectionStart = el.selectionEnd = start + 1;
+        }
+      });
+      return;
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault();
       const el = e.currentTarget;
@@ -1003,7 +1031,7 @@ export default function Home() {
         .btn-preview:hover { filter: brightness(1.08); }
         .btn-edit-toggle { background: linear-gradient(140deg, rgba(132,170,255,0.18), rgba(75,108,186,0.16)); color: #dce9ff; border: 1px solid rgba(193,215,255,0.42); padding: 6px 12px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
         .btn-edit-toggle:hover { filter: brightness(1.08); }
-        .btn-save-editor { background: linear-gradient(135deg, #18b575, #0f8e66); color: #f4fff9; border: 1px solid rgba(183,255,226,0.55); padding: 6px 13px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.76rem; font-weight: 800; letter-spacing: 0.28px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; box-shadow: 0 10px 24px rgba(11,95,71,0.35); }
+        .btn-save-editor { background: linear-gradient(135deg, #18b575, #0f8e66); color: #f4fff9; border: 1px solid rgba(183,255,226,0.55); padding: 6px 12px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; letter-spacing: 0; cursor: pointer; transition: all 0.15s; box-shadow: 0 8px 18px rgba(11,95,71,0.3); }
         .btn-save-editor:hover { filter: brightness(1.08); transform: translateY(-1px); }
         .btn-copy-editor { background: transparent; color: #a9bddf; border: 1px dashed rgba(180,205,245,0.6); padding: 5px 10px; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.8px; cursor: pointer; transition: all 0.15s; }
         .btn-copy-editor:hover { background: rgba(255,255,255,0.08); color: #e7f1ff; border-color: rgba(218,236,255,0.82); }
