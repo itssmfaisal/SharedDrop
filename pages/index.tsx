@@ -136,51 +136,184 @@ function VideoWithResume({ src, fileKey }: { src: string; fileKey: string }) {
   );
 }
 
-// ── Preview Modal ─────────────────────────────────────────────────────────────
-function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder: string; onClose: () => void }) {
+// ── Preview Modal / Editor ───────────────────────────────────────────────────
+function PreviewModal({ file, subfolder, onClose, onSaved }: { file: FileInfo; subfolder: string; onClose: () => void; onSaved?: () => void }) {
   const src = `/api/download?name=${encodeURIComponent(file.name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
   const ext = file.ext.toLowerCase();
+  const isCodeFile = CODE_EXTS.has(ext);
+  const isEditableText = ext === 'txt' || CODE_EXTS.has(ext);
   const [textContent, setTextContent] = useState<string | null>(null);
-  const [highlightedLines, setHighlightedLines] = useState<string[] | null>(null);
+  const [initialText, setInitialText] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [highlightedLines, setHighlightedLines] = useState<string[] | null>(null);
+  const lineRef = useRef<HTMLDivElement | null>(null);
+  const codeLayerRef = useRef<HTMLPreElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    if (ext === 'txt' || CODE_EXTS.has(ext)) {
-      fetch(src).then(r => r.text()).then(t => { if (!cancelled) setTextContent(t); }).catch(() => { if (!cancelled) setTextContent('Failed to load'); });
+    if (isEditableText) {
+      fetch(src)
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to load file');
+          return r.text();
+        })
+        .then(t => {
+          if (!cancelled) {
+            setTextContent(t);
+            setInitialText(t);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setTextContent('');
+            setInitialText('');
+          }
+        });
     } else {
       setTextContent(null);
+      setInitialText('');
     }
     return () => { cancelled = true; };
-  }, [src, ext]);
+  }, [src, isEditableText]);
 
-  // Build syntax-highlighted HTML per-line (using highlight.js) so we can render a line-number gutter.
   useEffect(() => {
-    let cancelled = false;
-    setHighlightedLines(null);
-    if (textContent !== null && CODE_EXTS.has(ext) && (window as any).hljs) {
-      try {
-        const tmp = document.createElement('code');
-        tmp.className = ext;
-        tmp.textContent = textContent;
-        try { (window as any).hljs.highlightElement(tmp); } catch (e) { /* ignore */ }
-        const html = tmp.innerHTML || '';
-        const lines = html.split(/\r?\n/);
-        if (!cancelled) setHighlightedLines(lines);
-      } catch (e) {
-        if (!cancelled) setHighlightedLines(null);
-      }
+    setEditMode(false);
+  }, [file.name, subfolder]);
+
+  useEffect(() => {
+    if (!isEditableText || !isCodeFile || textContent === null) {
+      setHighlightedLines(null);
+      return;
     }
-    return () => { cancelled = true; };
-  }, [textContent, ext]);
+
+    try {
+      const hljs = (window as any).hljs;
+      if (!hljs) {
+        setHighlightedLines(null);
+        return;
+      }
+
+      const lang = hljs.getLanguage(ext) ? ext : undefined;
+      const highlighted = lang
+        ? hljs.highlight(textContent, { language: lang, ignoreIllegals: true }).value
+        : hljs.highlightAuto(textContent).value;
+      setHighlightedLines(highlighted.split(/\r?\n/));
+    } catch {
+      setHighlightedLines(null);
+    }
+  }, [isEditableText, isCodeFile, textContent, ext]);
+
+  const lineCount = Math.max(1, (textContent || '').split(/\r?\n/).length);
+  const hasChanges = isEditableText && textContent !== null && textContent !== initialText;
+
+  const syncLineScroll = (scrollTop: number, scrollLeft = 0) => {
+    if (lineRef.current) lineRef.current.scrollTop = scrollTop;
+    if (codeLayerRef.current) {
+      codeLayerRef.current.scrollTop = scrollTop;
+      codeLayerRef.current.scrollLeft = scrollLeft;
+    }
+  };
+
+  const saveFile = async () => {
+    if (!isEditableText || textContent === null || !hasChanges) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const r = await fetch('/api/update-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          subfolder: subfolder || undefined,
+          content: textContent,
+        }),
+      });
+      if (!r.ok) throw new Error('Save failed');
+      setInitialText(textContent);
+      setSaveMsg('Saved');
+      onSaved?.();
+      setTimeout(() => setSaveMsg(''), 1500);
+    } catch {
+      setSaveMsg('Save failed');
+      setTimeout(() => setSaveMsg(''), 1800);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const closeModal = () => {
+    if (hasChanges) {
+      const confirmClose = window.confirm('You have unsaved changes. Close without saving?');
+      if (!confirmClose) return;
+    }
+    onClose();
+  };
+
+  const toggleEditMode = () => {
+    if (!editMode) {
+      setEditMode(true);
+      return;
+    }
+
+    if (hasChanges) {
+      const confirmExit = window.confirm('Discard unsaved changes and switch to read mode?');
+      if (!confirmExit) return;
+      setTextContent(initialText);
+    }
+    setEditMode(false);
+  };
+
+  const onEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const el = e.currentTarget;
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const current = textContent || '';
+      const next = current.slice(0, start) + '  ' + current.slice(end);
+      setTextContent(next);
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start + 2;
+      });
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      void saveFile();
+    }
+  };
   
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={closeModal}>
       <div onClick={e => e.stopPropagation()} style={{ background:'linear-gradient(145deg, rgba(28,46,88,0.6), rgba(12,20,40,0.5))', border:'1px solid var(--border)', borderRadius:16, padding:24, maxWidth:'90vw', maxHeight:'90vh', display:'flex', flexDirection:'column', gap:16, boxShadow:'0 20px 60px rgba(2,6,20,0.5)', backdropFilter:'blur(14px)', WebkitBackdropFilter:'blur(14px)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:24 }}>
-          <div style={{ fontWeight:700, fontSize:'0.9rem' }}>{file.name}</div>
-          <button className="btn-del" onClick={onClose} style={{ color:'var(--muted)' }}>✕</button>
+          <div style={{ fontWeight:700, fontSize:'0.9rem' }}>{file.name}{isEditableText ? (editMode ? ' (Edit Mode)' : ' (Read Mode)') : ''}</div>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            {isEditableText && (
+              <>
+                {saveMsg && <span style={{ fontSize:'0.8rem', color: saveMsg === 'Saved' ? 'var(--green)' : 'var(--accent2)' }}>{saveMsg}</span>}
+                <button className="btn-edit-toggle" onClick={e => { e.stopPropagation(); toggleEditMode(); }}>
+                  {editMode ? 'Read' : 'Edit'}
+                </button>
+                {editMode && (
+                <button
+                  className="btn-save-editor"
+                  disabled={!hasChanges || saving}
+                  onClick={async (e) => { e.stopPropagation(); await saveFile(); }}
+                  style={{ opacity: (!hasChanges || saving) ? 0.6 : 1, cursor: (!hasChanges || saving) ? 'default' : 'pointer' }}
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                )}
+              </>
+            )}
+            <button className="btn-del" onClick={closeModal} style={{ color:'var(--muted)' }}>✕</button>
+          </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', overflow:'auto', maxHeight:'70vh' }}>
           {IMAGE_EXTS.has(ext) && (
@@ -193,36 +326,98 @@ function PreviewModal({ file, subfolder, onClose }: { file: FileInfo; subfolder:
           {ext === 'pdf' && (
             <iframe src={src} title={file.name} style={{ width:'80vw', height:'68vh', border:'none', borderRadius:8 }} />
           )}
-          {CODE_EXTS.has(ext) && (
-            <div style={{ width:'80vw', height:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:12 }}>
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginBottom:8 }}>
-                <button className="btn-preview" onClick={async (e) => { e.stopPropagation(); if (!textContent) return; try { await navigator.clipboard.writeText(textContent); setCopying(true); setTimeout(() => setCopying(false), 1400); } catch (_) { setCopying(false); } }}>{copying ? 'Copied' : 'Copy'}</button>
+          {isEditableText && (
+            <div style={{ width:'80vw', height:'68vh', overflow:'hidden', background:'var(--surface2)', borderRadius:8, padding:12, display:'grid', gridTemplateRows:'auto 1fr', gap:8 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                <div style={{ fontSize:12, color:'var(--muted)', fontFamily:'JetBrains Mono, monospace' }}>{editMode ? 'Editing' : 'Reading'} {file.name} • {lineCount} line{lineCount === 1 ? '' : 's'}</div>
+                <button className="btn-copy-editor" onClick={async (e) => { e.stopPropagation(); if (textContent === null) return; try { await navigator.clipboard.writeText(textContent); setCopying(true); setTimeout(() => setCopying(false), 1400); } catch (_) { setCopying(false); } }}>{copying ? 'COPIED' : 'COPY'}</button>
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns: '48px 1fr', gap:12, alignItems:'start', overflow: 'visible', maxHeight: 'none' }}>
-                <div style={{ textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:12, paddingTop:6, userSelect:'none', paddingRight:8, overflow: 'visible', maxHeight: 'none' }}>
-                  {(highlightedLines || (textContent ? textContent.split(/\r?\n/) : [])).map((_, i) => (
-                    <div key={i} style={{ height: '1.38em', lineHeight: '1.38em' }}>{i + 1}</div>
+              <div style={{ display:'grid', gridTemplateColumns: '56px 1fr', minHeight:0, border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+                <div ref={lineRef} style={{ overflow:'hidden', background:'rgba(0,0,0,0.15)', borderRight:'1px solid var(--border)', textAlign:'right', color:'var(--muted)', fontFamily:'JetBrains Mono, monospace', fontSize:12, lineHeight:'1.5', padding:'10px 8px', userSelect:'none' }}>
+                  {Array.from({ length: lineCount }).map((_, i) => (
+                    <div key={i}>{i + 1}</div>
                   ))}
                 </div>
-
-                <div style={{ overflow: 'visible', maxHeight: 'none' }}>
-                  <pre style={{ margin:0, padding:8, background:'transparent', fontFamily:'JetBrains Mono, monospace', fontSize:13, color:'var(--text)', whiteSpace:'pre', overflow: 'visible', maxHeight: 'none' }}>
-                    {highlightedLines ? (
-                      highlightedLines.map((lineHtml, i) => (
-                        <div key={i} style={{ minHeight: '1.38em', lineHeight: '1.38em' }} dangerouslySetInnerHTML={{ __html: lineHtml || '&nbsp;' }} />
-                      ))
+                {editMode ? (
+                  isCodeFile ? (
+                    <div style={{ position:'relative', width:'100%', height:'100%' }}>
+                      <pre
+                        ref={codeLayerRef}
+                        aria-hidden="true"
+                        style={{
+                          position:'absolute',
+                          inset:0,
+                          margin:0,
+                          padding:10,
+                          overflow:'auto',
+                          pointerEvents:'none',
+                          whiteSpace:'pre',
+                          fontFamily:'JetBrains Mono, monospace',
+                          fontSize:13,
+                          lineHeight:'1.5',
+                          background:'transparent'
+                        }}
+                      >
+                        {highlightedLines ? (
+                          highlightedLines.map((lineHtml, i) => (
+                            <div key={i} style={{ minHeight:'1.5em' }} dangerouslySetInnerHTML={{ __html: lineHtml || '&nbsp;' }} />
+                          ))
+                        ) : (
+                          <code style={{ color:'var(--text)' }}>{textContent ?? ''}</code>
+                        )}
+                      </pre>
+                      <textarea
+                        value={textContent ?? ''}
+                        onChange={e => setTextContent(e.target.value)}
+                        onKeyDown={onEditorKeyDown}
+                        onScroll={e => syncLineScroll(e.currentTarget.scrollTop, e.currentTarget.scrollLeft)}
+                        spellCheck={false}
+                        style={{
+                          position:'absolute',
+                          inset:0,
+                          width:'100%',
+                          height:'100%',
+                          resize:'none',
+                          border:'none',
+                          outline:'none',
+                          background:'transparent',
+                          color:'transparent',
+                          caretColor:'var(--text)',
+                          textShadow:'0 0 0 rgba(0,0,0,0)',
+                          WebkitTextFillColor:'transparent',
+                          fontFamily:'JetBrains Mono, monospace',
+                          fontSize:13,
+                          lineHeight:'1.5',
+                          padding:10,
+                          overflow:'auto'
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <textarea
+                      value={textContent ?? ''}
+                      onChange={e => setTextContent(e.target.value)}
+                      onKeyDown={onEditorKeyDown}
+                      onScroll={e => syncLineScroll(e.currentTarget.scrollTop)}
+                      spellCheck={false}
+                      style={{ width:'100%', height:'100%', resize:'none', border:'none', outline:'none', background:'transparent', color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:13, lineHeight:'1.5', padding:10, overflow:'auto' }}
+                    />
+                  )
+                ) : (
+                  <div onScroll={e => syncLineScroll((e.currentTarget as HTMLDivElement).scrollTop, (e.currentTarget as HTMLDivElement).scrollLeft)} style={{ width:'100%', height:'100%', overflow:'auto', padding:10 }}>
+                    {isCodeFile && highlightedLines ? (
+                      <pre style={{ margin:0, background:'transparent', fontFamily:'JetBrains Mono, monospace', fontSize:13, lineHeight:'1.5', whiteSpace:'pre' }}>
+                        {highlightedLines.map((lineHtml, i) => (
+                          <div key={i} style={{ minHeight:'1.5em' }} dangerouslySetInnerHTML={{ __html: lineHtml || '&nbsp;' }} />
+                        ))}
+                      </pre>
                     ) : (
-                      <code style={{ display:'block', padding:0, border:0, background:'transparent', color:'var(--text)' }}>{textContent ?? 'Loading…'}</code>
+                      <pre style={{ margin:0, background:'transparent', color:'var(--text)', fontFamily:'JetBrains Mono, monospace', fontSize:13, lineHeight:'1.5', whiteSpace:'pre' }}>{textContent ?? ''}</pre>
                     )}
-                  </pre>
-                </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-          {ext === 'txt' && !CODE_EXTS.has(ext) && (
-            <div style={{ width:'80vw', maxHeight:'68vh', overflow:'auto', background:'var(--surface2)', borderRadius:8, padding:16 }}>
-              <pre style={{ whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'JetBrains Mono, monospace', color:'var(--text)', fontSize:13 }}>{textContent ?? 'Loading…'}</pre>
             </div>
           )}
           {AUDIO_EXTS.has(ext) && (
@@ -806,6 +1001,12 @@ export default function Home() {
         .btn-dl:hover { filter: brightness(1.08); }
         .btn-preview { background: linear-gradient(135deg, rgba(127,245,214,0.22), rgba(114,167,255,0.22)); color: #effff8; border: 1px solid rgba(206,248,235,0.44); padding: 5px 10px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
         .btn-preview:hover { filter: brightness(1.08); }
+        .btn-edit-toggle { background: linear-gradient(140deg, rgba(132,170,255,0.18), rgba(75,108,186,0.16)); color: #dce9ff; border: 1px solid rgba(193,215,255,0.42); padding: 6px 12px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+        .btn-edit-toggle:hover { filter: brightness(1.08); }
+        .btn-save-editor { background: linear-gradient(135deg, #18b575, #0f8e66); color: #f4fff9; border: 1px solid rgba(183,255,226,0.55); padding: 6px 13px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.76rem; font-weight: 800; letter-spacing: 0.28px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; box-shadow: 0 10px 24px rgba(11,95,71,0.35); }
+        .btn-save-editor:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .btn-copy-editor { background: transparent; color: #a9bddf; border: 1px dashed rgba(180,205,245,0.6); padding: 5px 10px; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.8px; cursor: pointer; transition: all 0.15s; }
+        .btn-copy-editor:hover { background: rgba(255,255,255,0.08); color: #e7f1ff; border-color: rgba(218,236,255,0.82); }
         .btn-action { background: none; color: var(--muted); border: none; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 0.9rem; transition: all 0.15s; display: grid; place-items: center; }
         .btn-action:hover { background: rgba(255,255,255,0.12); color: var(--text); }
         .btn-action.del:hover { background: rgba(255,101,132,0.15); color: var(--accent2); }
@@ -1032,7 +1233,17 @@ export default function Home() {
 
       {/* Modals */}
       {showQR && serverUrl && <QRModal url={serverUrl} onClose={() => setShowQR(false)} />}
-      {previewFile && <PreviewModal file={previewFile} subfolder={subfolder} onClose={() => setPreviewFile(null)} />}
+      {previewFile && (
+        <PreviewModal
+          file={previewFile}
+          subfolder={subfolder}
+          onClose={() => setPreviewFile(null)}
+          onSaved={async () => {
+            showToast('File saved');
+            await fetchFiles();
+          }}
+        />
+      )}
       {renameFile && (
         <RenameModal file={renameFile} subfolder={subfolder} onClose={() => setRenameFile(null)}
           onDone={async () => { setRenameFile(null); showToast('Renamed successfully'); await fetchFiles(); }}
