@@ -11,7 +11,7 @@ GITHUB_REPO="itssmfaisal/SharedDrop"
 BUNDLE_NAME="shareddrop.tar.gz"
 INSTALL_DIR="$HOME/SharedDrop"
 APP_NAME="shareddrop"
-DEFAULT_PORT=3000
+DEFAULT_PORT=5000
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
