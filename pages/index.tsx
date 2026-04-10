@@ -105,8 +105,32 @@ function QRModal({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 // Video player with resume feature (top-level component)
-function VideoWithResume({ src, fileKey }: { src: string; fileKey: string }) {
+function VideoWithResume({ src, fileKey, onNextVideo, hasNextVideo }: { src: string; fileKey: string; onNextVideo?: () => void; hasNextVideo?: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const holdTimerRef = useRef<number | null>(null);
+  const holdUiTimerRef = useRef<number | null>(null);
+  const controlsIdleTimerRef = useRef<number | null>(null);
+
+  const [locked, setLocked] = useState(false);
+  const [holdFast, setHoldFast] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showHoldControl, setShowHoldControl] = useState(true);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const formatTime = (seconds: number) => {
+    if (!isFinite(seconds) || seconds < 0) return '0:00';
+    const total = Math.floor(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     const v = videoRef.current;
@@ -114,7 +138,10 @@ function VideoWithResume({ src, fileKey }: { src: string; fileKey: string }) {
     const saved = localStorage.getItem('videoTime:' + fileKey);
     if (saved) {
       const t = parseFloat(saved);
-      if (!isNaN(t)) v.currentTime = t;
+      if (!isNaN(t)) {
+        v.currentTime = t;
+        setCurrentTime(t);
+      }
     }
   }, [fileKey]);
 
@@ -124,24 +151,522 @@ function VideoWithResume({ src, fileKey }: { src: string; fileKey: string }) {
     localStorage.setItem('videoTime:' + fileKey, String(v.currentTime));
   }, [fileKey]);
 
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const clearHoldUiTimer = () => {
+    if (holdUiTimerRef.current !== null) {
+      window.clearTimeout(holdUiTimerRef.current);
+      holdUiTimerRef.current = null;
+    }
+  };
+
+  const clearControlsIdleTimer = () => {
+    if (controlsIdleTimerRef.current !== null) {
+      window.clearTimeout(controlsIdleTimerRef.current);
+      controlsIdleTimerRef.current = null;
+    }
+  };
+
+  const resetSpeed = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.playbackRate = 1;
+    setHoldFast(false);
+  };
+
+  const onHoldStart = () => {
+    if (locked) return;
+    clearHoldTimer();
+    holdTimerRef.current = window.setTimeout(() => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.playbackRate = 2;
+      setHoldFast(true);
+    }, 350);
+  };
+
+  const onHoldEnd = () => {
+    clearHoldTimer();
+    resetSpeed();
+  };
+
+  const refreshHoldControlVisibility = () => {
+    setShowHoldControl(true);
+    clearHoldUiTimer();
+    if (!locked && isPlaying) {
+      holdUiTimerRef.current = window.setTimeout(() => {
+        setShowHoldControl(false);
+      }, 1800);
+    }
+  };
+
+  const refreshControlsVisibility = () => {
+    if (locked) return;
+    setControlsVisible(true);
+    clearControlsIdleTimer();
+    controlsIdleTimerRef.current = window.setTimeout(() => {
+      setControlsVisible(false);
+    }, 3000);
+  };
+
+  const onPlayerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (locked) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const nearTop = y <= 100;
+    const nearBottom = y >= rect.height - 140;
+    if (nearTop || nearBottom) {
+      refreshControlsVisibility();
+      refreshHoldControlVisibility();
+    }
+  };
+
+  const onPlayerPointerDown = () => {
+    if (locked) return;
+    refreshControlsVisibility();
+    refreshHoldControlVisibility();
+  };
+
+  useEffect(() => {
+    refreshHoldControlVisibility();
+  }, [isPlaying, locked]);
+
+  useEffect(() => {
+    if (locked) {
+      setControlsVisible(false);
+      clearControlsIdleTimer();
+      return;
+    }
+    refreshControlsVisibility();
+  }, [locked, isPlaying]);
+
+  useEffect(() => {
+    return () => {
+      clearHoldTimer();
+      clearHoldUiTimer();
+      clearControlsIdleTimer();
+      resetSpeed();
+    };
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (typeof window === 'undefined') return;
+      setIsSmallScreen(window.innerWidth <= 640);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element | null;
+        mozFullScreenElement?: Element | null;
+        msFullscreenElement?: Element | null;
+      };
+      const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement || null;
+      const c = containerRef.current;
+      setIsFullscreen(!!c && fsEl === c);
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    const c = containerRef.current;
+    const v = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitExitFullscreen?: () => void;
+      webkitDisplayingFullscreen?: boolean;
+    }) | null;
+    if (!c) return;
+
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      mozFullScreenElement?: Element | null;
+      msFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+      msExitFullscreen?: () => Promise<void> | void;
+    };
+    const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement || null;
+
+    if (fsEl === c) {
+      Promise.resolve(doc.exitFullscreen?.() || doc.webkitExitFullscreen?.() || doc.msExitFullscreen?.()).catch(() => {});
+      return;
+    }
+
+    if (!fsEl) {
+      const anyEl = c as HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> | void; msRequestFullscreen?: () => Promise<void> | void };
+      Promise.resolve(anyEl.requestFullscreen?.() || anyEl.webkitRequestFullscreen?.() || anyEl.msRequestFullscreen?.())
+        .catch(() => {
+          if (v?.webkitEnterFullscreen) v.webkitEnterFullscreen();
+        });
+      return;
+    }
+
+    if (v?.webkitDisplayingFullscreen && v.webkitExitFullscreen) {
+      v.webkitExitFullscreen();
+    }
+  };
+
+  const togglePlayPause = () => {
+    const v = videoRef.current;
+    if (!v || locked) return;
+    if (v.paused) {
+      void v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
+  };
+
+  const fileLabel = fileKey.split('/').pop() || 'Video';
+  const isCompact = isSmallScreen && !isFullscreen;
+
+  const glassBtn: React.CSSProperties = {
+    padding: '7px 10px',
+    borderRadius: 10,
+    border: '1px solid rgba(214, 232, 255, 0.38)',
+    background: 'rgba(7, 14, 35, 0.55)',
+    color: '#f3f8ff',
+    fontSize: 12,
+    fontFamily: 'JetBrains Mono, monospace',
+    cursor: 'pointer',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
+  };
+
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      controls
-      style={{ maxWidth: '80vw', maxHeight: '68vh', borderRadius: 8 }}
-      onPause={saveTime}
-      onTimeUpdate={saveTime}
-    />
+    <div
+      ref={containerRef}
+      onPointerMove={onPlayerPointerMove}
+      onPointerDown={onPlayerPointerDown}
+      onTouchStart={onPlayerPointerDown}
+      style={{
+        position: 'relative',
+        display: isFullscreen ? 'flex' : 'inline-block',
+        alignItems: isFullscreen ? 'center' : undefined,
+        justifyContent: isFullscreen ? 'center' : undefined,
+        width: isFullscreen ? '100vw' : 'auto',
+        height: isFullscreen ? '100vh' : 'auto',
+        borderRadius: isFullscreen ? 0 : 8,
+        overflow: 'hidden',
+        background: '#000'
+      }}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        controls={false}
+        playsInline
+        style={{
+          width: isFullscreen ? '100vw' : 'auto',
+          height: isFullscreen ? '100vh' : 'auto',
+          maxWidth: isFullscreen ? 'none' : '80vw',
+          maxHeight: isFullscreen ? 'none' : '68vh',
+          objectFit: 'contain',
+          borderRadius: isFullscreen ? 0 : 8,
+          display: 'block'
+        }}
+        onLoadedMetadata={() => {
+          const v = videoRef.current;
+          if (!v) return;
+          setDuration(v.duration || 0);
+        }}
+        onPause={() => { saveTime(); setIsPlaying(false); }}
+        onTimeUpdate={() => {
+          const v = videoRef.current;
+          if (!v) return;
+          setCurrentTime(v.currentTime);
+          saveTime();
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onEnded={() => setIsPlaying(false)}
+        onClick={togglePlayPause}
+        onPointerDown={() => {
+          if (isCompact && !locked) onHoldStart();
+        }}
+        onPointerUp={() => {
+          if (isCompact) onHoldEnd();
+        }}
+        onPointerCancel={() => {
+          if (isCompact) onHoldEnd();
+        }}
+      />
+
+      {!locked && controlsVisible && isFullscreen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            right: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            zIndex: 5,
+            borderRadius: 12,
+            padding: isCompact ? '6px 8px' : '9px 12px',
+            background: 'rgba(5, 12, 28, 0.45)',
+            border: '1px solid rgba(212, 231, 255, 0.18)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+        >
+          <div style={{ minWidth: 0, fontSize: 13, color: 'rgba(239,246,255,0.95)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {fileLabel}
+          </div>
+
+          <button
+            onClick={() => { setLocked(v => !v); onHoldEnd(); }}
+            style={{ ...glassBtn, width: 36, height: 32, padding: 0, display: 'grid', placeItems: 'center' }}
+            title="Lock player controls"
+          >
+            🔒
+          </button>
+        </div>
+      )}
+
+      {!locked && controlsVisible && !isFullscreen && (
+        <button
+          onClick={() => { setLocked(true); onHoldEnd(); }}
+          style={{ ...glassBtn, position: 'absolute', top: 12, right: 12, width: 36, height: 32, padding: 0, display: 'grid', placeItems: 'center', zIndex: 5 }}
+          title="Lock player controls"
+        >
+          🔒
+        </button>
+      )}
+
+      {!locked && controlsVisible && showHoldControl && !(isCompact && !isFullscreen) && (
+        <div
+          onPointerDown={onHoldStart}
+          onPointerUp={onHoldEnd}
+          onPointerCancel={onHoldEnd}
+          onPointerLeave={onHoldEnd}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: isCompact ? 92 : 122,
+            transform: 'translateX(-50%)',
+            padding: '7px 11px',
+            borderRadius: 10,
+            background: 'rgba(4, 10, 28, 0.66)',
+            border: '1px solid rgba(176, 205, 255, 0.4)',
+            color: '#eef5ff',
+            fontSize: 12,
+            fontFamily: 'JetBrains Mono, monospace',
+            userSelect: 'none',
+            touchAction: 'none',
+            cursor: 'pointer',
+            zIndex: 3,
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+          title="Press and hold for 2x"
+        >
+          {holdFast ? '2x' : 'Hold 2x'}
+        </div>
+      )}
+
+      {!locked && controlsVisible && (
+        <div
+          style={{
+            position: isCompact ? 'relative' : 'absolute',
+            left: isCompact ? undefined : 10,
+            right: isCompact ? undefined : 10,
+            bottom: isCompact ? undefined : 10,
+            zIndex: 4,
+            borderRadius: 14,
+            background: 'rgba(5, 12, 28, 0.54)',
+            border: '1px solid rgba(176, 205, 255, 0.24)',
+            padding: isCompact ? '8px 9px' : '10px 12px',
+            display: 'grid',
+            gridTemplateRows: 'auto auto',
+            gap: isCompact ? 8 : 10,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            margin: isCompact ? '4px 6px 6px 6px' : undefined,
+          }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '52px 1fr 52px' : '60px 1fr 60px', alignItems: 'center', gap: isCompact ? 8 : 10 }}>
+            <div style={{ fontSize: isCompact ? 10 : 11, fontFamily: 'JetBrains Mono, monospace', color: '#dce9ff', textAlign: 'left' }}>{formatTime(currentTime)}</div>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(duration, 0.1)}
+              step={0.1}
+              value={Math.min(currentTime, duration || currentTime)}
+              onChange={e => {
+                const v = videoRef.current;
+                if (!v) return;
+                const next = Number(e.target.value);
+                v.currentTime = next;
+                setCurrentTime(next);
+              }}
+              style={{ width: '100%' }}
+            />
+            <div style={{ fontSize: isCompact ? 10 : 11, fontFamily: 'JetBrains Mono, monospace', color: '#dce9ff', textAlign: 'right' }}>{formatTime(duration)}</div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isCompact ? 10 : 16 }}>
+            {onNextVideo && (
+              <button
+                onClick={e => { e.stopPropagation(); onNextVideo(); }}
+                disabled={!hasNextVideo}
+                style={{
+                  width: isCompact ? 38 : 44,
+                  height: isCompact ? 38 : 44,
+                  borderRadius: 999,
+                  border: '1px solid rgba(220, 236, 255, 0.45)',
+                  background: 'rgba(9, 18, 42, 0.68)',
+                  color: '#f3f8ff',
+                  fontSize: isCompact ? 16 : 20,
+                  lineHeight: 1,
+                  cursor: hasNextVideo ? 'pointer' : 'default',
+                  opacity: hasNextVideo ? 1 : 0.55,
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+                title={hasNextVideo ? 'Open next video in this folder' : 'No next video in this folder'}
+              >
+                ⏭
+              </button>
+            )}
+
+            <button
+              onClick={togglePlayPause}
+              style={{
+                width: isCompact ? 44 : 52,
+                height: isCompact ? 44 : 52,
+                borderRadius: 999,
+                border: '1px solid rgba(220, 236, 255, 0.55)',
+                background: 'rgba(9, 18, 42, 0.72)',
+                color: '#f3f8ff',
+                fontSize: isCompact ? 20 : 24,
+                lineHeight: 1,
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+              title={isPlaying ? 'Pause' : 'Play'}
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                const v = videoRef.current;
+                if (!v) return;
+                v.currentTime = Math.min(v.duration || Number.POSITIVE_INFINITY, v.currentTime + 10);
+              }}
+              style={{
+                width: isCompact ? 38 : 44,
+                height: isCompact ? 38 : 44,
+                borderRadius: 999,
+                border: '1px solid rgba(220, 236, 255, 0.45)',
+                background: 'rgba(9, 18, 42, 0.68)',
+                color: '#f3f8ff',
+                fontSize: isCompact ? 10 : 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+              title="Jump forward 10 seconds"
+            >
+              +10
+            </button>
+
+            <button
+              onClick={toggleFullscreen}
+              style={{
+                width: isCompact ? 38 : 44,
+                height: isCompact ? 38 : 44,
+                borderRadius: 999,
+                border: '1px solid rgba(220, 236, 255, 0.45)',
+                background: 'rgba(9, 18, 42, 0.68)',
+                color: '#f3f8ff',
+                fontSize: isCompact ? 14 : 18,
+                lineHeight: 1,
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? '🡼' : '⛶'}
+            </button>
+
+            <div style={{ fontSize: isCompact ? 10 : 11, fontFamily: 'JetBrains Mono, monospace', color: 'rgba(220,236,255,0.9)' }}>
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {locked && (
+        <button
+          onClick={() => { setLocked(false); onHoldEnd(); refreshControlsVisibility(); }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 36,
+            height: 32,
+            borderRadius: 10,
+            border: '1px solid rgba(214, 232, 255, 0.38)',
+            background: 'rgba(7, 14, 35, 0.55)',
+            color: '#f3f8ff',
+            fontSize: 14,
+            cursor: 'pointer',
+            zIndex: 6,
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+          title="Unlock player controls"
+        >
+          🔓
+        </button>
+      )}
+
+      {locked && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.18)',
+            zIndex: 2,
+          }}
+          aria-hidden="true"
+        />
+      )}
+    </div>
   );
 }
 
 // ── Preview Modal / Editor ───────────────────────────────────────────────────
-function PreviewModal({ file, subfolder, onClose, onSaved }: { file: FileInfo; subfolder: string; onClose: () => void; onSaved?: () => void }) {
+function PreviewModal({ file, subfolder, onClose, onSaved, onNextVideo, hasNextVideo }: { file: FileInfo; subfolder: string; onClose: () => void; onSaved?: () => void; onNextVideo?: () => void; hasNextVideo?: boolean }) {
   const src = `/api/download?name=${encodeURIComponent(file.name)}${subfolder ? `&subfolder=${encodeURIComponent(subfolder)}` : ''}`;
   const ext = file.ext.toLowerCase();
   const isCodeFile = CODE_EXTS.has(ext);
   const isEditableText = ext === 'txt' || CODE_EXTS.has(ext);
+  const isVideoFile = VIDEO_EXTS.has(ext);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [initialText, setInitialText] = useState('');
   const [editMode, setEditMode] = useState(false);
@@ -348,7 +873,7 @@ function PreviewModal({ file, subfolder, onClose, onSaved }: { file: FileInfo; s
             <img src={src} alt={file.name} style={{ maxWidth:'80vw', maxHeight:'68vh', borderRadius:8, objectFit:'contain' }} />
           )}
           {VIDEO_EXTS.has(ext) && (
-            <VideoWithResume src={src} fileKey={(subfolder ? subfolder + '/' : '') + file.name} />
+            <VideoWithResume src={src} fileKey={(subfolder ? subfolder + '/' : '') + file.name} onNextVideo={onNextVideo} hasNextVideo={hasNextVideo} />
           )}
           
           {ext === 'pdf' && (
@@ -881,6 +1406,24 @@ export default function Home() {
 
   const canPreview = (f: FileInfo) => IMAGE_EXTS.has(f.ext) || VIDEO_EXTS.has(f.ext) || AUDIO_EXTS.has(f.ext) || f.ext === 'txt' || f.ext === 'pdf' || CODE_EXTS.has(f.ext);
 
+  const compareBySort = (a: FileInfo, b: FileInfo) => {
+    let cmp = 0;
+    if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+    else if (sortKey === 'size') cmp = a.size - b.size;
+    else cmp = new Date(a.modified).getTime() - new Date(b.modified).getTime();
+    return sortAsc ? cmp : -cmp;
+  };
+
+  const getNextVideoInFolder = (currentName: string): FileInfo | null => {
+    const videos = [...files]
+      .filter(f => !f.isDir && VIDEO_EXTS.has(f.ext.toLowerCase()))
+      .sort(compareBySort);
+    if (videos.length === 0) return null;
+    const idx = videos.findIndex(v => v.name === currentName);
+    if (idx === -1 || idx >= videos.length - 1) return null;
+    return videos[idx + 1];
+  };
+
   const openRowItem = (f: FileInfo) => {
     if (f.isDir) {
       navigateTo(subfolder ? `${subfolder}/${f.name}` : f.name);
@@ -897,13 +1440,7 @@ export default function Home() {
 
   const sortedFiles = [...files]
     .filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
-      else if (sortKey === 'size') cmp = a.size - b.size;
-      else cmp = new Date(a.modified).getTime() - new Date(b.modified).getTime();
-      return sortAsc ? cmp : -cmp;
-    });
+    .sort(compareBySort);
 
   const handleSort = (key: SortKey) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
   const totalSize = files.reduce((acc, f) => acc + (f.isDir ? 0 : f.size), 0);
@@ -1272,6 +1809,11 @@ export default function Home() {
           file={previewFile}
           subfolder={subfolder}
           onClose={() => setPreviewFile(null)}
+          hasNextVideo={!!getNextVideoInFolder(previewFile.name)}
+          onNextVideo={() => {
+            const nextVideo = getNextVideoInFolder(previewFile.name);
+            if (nextVideo) setPreviewFile(nextVideo);
+          }}
           onSaved={async () => {
             showToast('File saved');
             await fetchFiles();
